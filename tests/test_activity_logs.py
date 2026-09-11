@@ -49,7 +49,7 @@ def test_empty_and_new_event_filter(client, monkeypatch):
     response = client.get('/?start_date=2026-09-11&end_date=2026-09-11&log_type=new_event&users=a,b')
     assert response.status_code == 200
     assert 'No logs found' in response.text
-    assert 'Recent map' not in response.text
+    assert 'Recent map' in response.text
     fetch.assert_called_once_with(start_at='2026-09-11T00:00:00+00:00', end_before='2026-09-12T00:00:00+00:00', user_ids=['a','b'], log_type='new_event', platform=None)
 
 
@@ -73,3 +73,52 @@ def test_invalid_dates_and_read_error(client, monkeypatch):
     assert 'Start date must be' in client.get('/?start_date=2026-09-12&end_date=2026-09-11').text
     fetch.assert_not_called()
     assert 'Read unavailable' in client.get('/').text
+
+
+def test_map_locations_empty_and_error(client, monkeypatch):
+    fetch = MagicMock(return_value=[
+        dict(lat=1, lng=2, occurred_at="later", user_id="u", session_id="s"),
+        dict(lat=0, lng=0, occurred_at="earlier", user_id="u", session_id="s"),
+    ])
+    monkeypatch.setattr(routes, 'fetch_recent_logs', fetch)
+    response = client.get('/map')
+    assert response.status_code == 200
+    fetch.assert_called_once_with(locations_only=True, user_ids=None, start_at=None, end_before=None)
+    assert response.context['points'][0]['lat'] == 0
+    assert 'Static debug points' not in response.text
+    fetch.return_value = []
+    assert 'No location records found' in client.get('/map').text
+    fetch.side_effect = RuntimeError('Read unavailable')
+    assert 'Unable to load locations' in client.get('/map').text
+    client.post('/logout', follow_redirects=False)
+    assert client.get('/map').status_code == 401
+
+
+def test_map_filters(client, monkeypatch):
+    fetch = MagicMock(return_value=[])
+    monkeypatch.setattr(routes, 'fetch_recent_logs', fetch)
+    response = client.get('/map', params={'user_id': ' walker ', 'start_time': '2026-09-11T14:43:00', 'end_time': '2026-09-11T14:57:00'})
+    fetch.assert_called_once_with(locations_only=True, user_ids=['walker'], start_at='2026-09-11T14:43:00+00:00', end_before='2026-09-11T14:57:00+00:00')
+    assert 'value="walker"' in response.text
+    assert 'value="2026-09-11T14:43:00"' in response.text
+
+
+@pytest.mark.parametrize('params', [
+    {'start_time': 'bad'},
+    {'start_time': '2026-09-11T15:00', 'end_time': '2026-09-11T14:00'},
+    {'start_time': '2026-09-11T15:00', 'end_time': '2026-09-11T15:00'},
+])
+def test_map_invalid_filters(client, monkeypatch, params):
+    fetch = MagicMock()
+    monkeypatch.setattr(routes, 'fetch_recent_logs', fetch)
+    response = client.get('/map', params=params)
+    assert 'Unable to load locations' in response.text
+    fetch.assert_not_called()
+
+
+@pytest.mark.parametrize('field, expected', [('start_time', 'start_at'), ('end_time', 'end_before')])
+def test_map_one_sided_time_filter(client, monkeypatch, field, expected):
+    fetch = MagicMock(return_value=[])
+    monkeypatch.setattr(routes, 'fetch_recent_logs', fetch)
+    client.get('/map', params={field: '2026-09-11T14:00'})
+    assert fetch.call_args.kwargs[expected] == '2026-09-11T14:00:00+00:00'

@@ -19,6 +19,7 @@ def fetch_recent_logs(
     user_ids: list[str] | None = None,
     log_type: str | None = None,
     platform: str | None = None,
+    locations_only: bool = False,
 ) -> list[dict[str, Any]]:
     settings = get_settings()
     client = get_supabase_client()
@@ -31,6 +32,9 @@ def fetch_recent_logs(
         .order("id", desc=True)
         .limit(query_limit)
     )
+
+    if locations_only:
+        query = query.not_.is_("lat", "null").not_.is_("lng", "null")
 
     if start_at:
         query = query.gte("occurred_at", start_at)

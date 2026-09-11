@@ -7,7 +7,10 @@ Date filters use UTC event time; the timezone selector changes timestamp display
 Event type filtering accepts an exact value rather than a fixed list.
 Coordinates, accuracy (m), speed (m/s), and motion are shown in the table; expand
 View details for receipt time, notes, session/version identifiers, and JSON payload.
-The placeholder map is no longer linked or served.
+Recent map shows the latest location records across all users, with separate lines
+for each user/session. Filter by exact user ID and optional UTC start/end times
+(start inclusive, end exclusive). It uses the configured row limit after filtering
+and does not inherit log filters.
 
 When updating an existing deployment, set `SUPABASE_LOGS_TABLE=activity_logs`
 in its environment and restart the app. The configured Supabase key must have

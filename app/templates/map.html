@@ -16,7 +16,7 @@
     <header class="panel-header map-panel-header">
       <div>
         <h1>Recent Locations</h1>
-        <p>Static debug points for the first pass of map tooling.</p>
+        <p>Latest {{ points | length }} matching location records, shown oldest to newest. Times are UTC.</p>
       </div>
       <div class="panel-actions map-panel-actions">
         <a href="/" class="secondary-button secondary-link">Back to logs</a>
@@ -26,6 +26,30 @@
       </div>
     </header>
 
+    <form method="get" action="/map" class="filters">
+      <div class="filter-field">
+        <label for="user_id">User ID</label>
+        <input id="user_id" name="user_id" value="{{ filters.user_id }}" placeholder="All users" />
+      </div>
+      <div class="filter-field">
+        <label for="start_time">Start time (UTC, inclusive)</label>
+        <input id="start_time" name="start_time" type="datetime-local" step="1" value="{{ filters.start_time }}" />
+      </div>
+      <div class="filter-field">
+        <label for="end_time">End time (UTC, exclusive)</label>
+        <input id="end_time" name="end_time" type="datetime-local" step="1" value="{{ filters.end_time }}" />
+      </div>
+      <div class="filter-actions">
+        <button type="submit">Apply filters</button>
+        <a href="/map" class="secondary-button secondary-link">Clear</a>
+      </div>
+    </form>
+
+    {% if error_message %}
+      <div class="alert alert-error"><strong>Unable to load locations.</strong><span>{{ error_message }}</span></div>
+    {% elif not points %}
+      <div class="empty-state">No location records found.</div>
+    {% else %}
     <section class="map-stack">
       <div id="recent-map" class="map-canvas" aria-label="Recent locations map"></div>
 
@@ -41,6 +65,7 @@
         </ol>
       </aside>
     </section>
+    {% endif %}
   </section>
 {% endblock %}
 
@@ -66,15 +91,26 @@
       }).addTo(map);
 
       const latLngs = points.map((point) => [point.lat, point.lng]);
-      const polyline = L.polyline(latLngs, { color: "#2e6fbb", weight: 4 }).addTo(map);
-
-      points.forEach((point, index) => {
-        L.marker([point.lat, point.lng])
-          .addTo(map)
-          .bindPopup(`${index + 1}. ${point.label}<br>${point.lat}, ${point.lng}`);
+      const tracks = new Map();
+      points.forEach((point) => {
+        if (!point.session_id) return;
+        const key = JSON.stringify([point.user_id, point.session_id]);
+        if (!tracks.has(key)) tracks.set(key, []);
+        tracks.get(key).push([point.lat, point.lng]);
+      });
+      tracks.forEach((track) => {
+        if (track.length > 1) L.polyline(track, { color: "#2e6fbb", weight: 4 }).addTo(map);
       });
 
-      map.fitBounds(polyline.getBounds(), { padding: [24, 24] });
+      points.forEach((point, index) => {
+        const popup = document.createElement("div");
+        popup.textContent = `${index + 1}. ${point.label} — ${point.lat}, ${point.lng}`;
+        L.marker([point.lat, point.lng])
+          .addTo(map)
+          .bindPopup(popup);
+      });
+
+      map.fitBounds(L.latLngBounds(latLngs), { padding: [24, 24], maxZoom: 17 });
     })();
   </script>
 {% endblock %}

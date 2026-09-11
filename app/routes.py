@@ -140,6 +140,61 @@ async def index(request: Request) -> HTMLResponse:
     )
 
 
+@router.get("/map", response_class=HTMLResponse)
+async def map_view(request: Request) -> HTMLResponse:
+    if not _is_authenticated(request):
+        return _login_response(request)
+
+    points = []
+    error_message = None
+    filters = {
+        name: request.query_params.get(name, "").strip()
+        for name in ("user_id", "start_time", "end_time")
+    }
+    try:
+        bounds = {}
+        for name in ("start_time", "end_time"):
+            value = filters[name]
+            if not value:
+                bounds[name] = None
+                continue
+            try:
+                parsed = datetime.fromisoformat(value)
+            except ValueError:
+                raise ValueError("Enter a valid start/end date and time.")
+            bounds[name] = (parsed.replace(tzinfo=timezone.utc) if parsed.tzinfo is None
+                            else parsed.astimezone(timezone.utc))
+        start = bounds["start_time"]
+        end = bounds["end_time"]
+        if start and end and start >= end:
+            raise ValueError("Start time must be before end time.")
+        rows = fetch_recent_logs(
+            locations_only=True,
+            user_ids=[filters["user_id"]] if filters["user_id"] else None,
+            start_at=start.isoformat() if start else None,
+            end_before=end.isoformat() if end else None,
+        )
+        points = [
+            {
+                "lat": row["lat"],
+                "lng": row["lng"],
+                "label": f"{row.get('occurred_at')} · {row.get('user_id')}",
+                "user_id": row.get("user_id"),
+                "session_id": row.get("session_id"),
+            }
+            for row in reversed(rows)
+            if row.get("lat") is not None and row.get("lng") is not None
+        ]
+    except Exception as exc:
+        error_message = str(exc)
+
+    return templates.TemplateResponse(
+        request,
+        "map.html",
+        {"request": request, "points": points, "error_message": error_message, "filters": filters},
+    )
+
+
 @router.post("/login", response_class=HTMLResponse)
 async def login(request: Request, password: str = Form(...)) -> HTMLResponse:
     settings = get_settings()
