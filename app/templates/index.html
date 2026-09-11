@@ -1,26 +1,29 @@
 {% extends "base.html" %}
 
-{% block title %}Alert Logs{% endblock %}
+{% block title %}Activity Logs{% endblock %}
 
 {% block content %}
   <section class="panel">
     <header class="panel-header">
       <div>
-        <h1>Alert Logs</h1>
-        <p>Latest records from Supabase.</p>
+        <h1>Activity Logs</h1>
+        <p>Latest events, newest first. Date filters use event time in UTC.</p>
       </div>
-      <form method="post" action="/logout">
-        <button type="submit" class="secondary-button">Log out</button>
-      </form>
+      <div class="panel-actions">
+        <a href="/map" class="secondary-button secondary-link">Recent map</a>
+        <form method="post" action="/logout">
+          <button type="submit" class="secondary-button">Log out</button>
+        </form>
+      </div>
     </header>
 
     <form method="get" action="/" class="filters">
       <div class="filter-field">
-        <label for="start_date">Start date</label>
+        <label for="start_date">Start date (UTC)</label>
         <input id="start_date" name="start_date" type="date" value="{{ filters.start_date }}" />
       </div>
       <div class="filter-field">
-        <label for="end_date">End date</label>
+        <label for="end_date">End date (UTC)</label>
         <input id="end_date" name="end_date" type="date" value="{{ filters.end_date }}" />
       </div>
       <div class="filter-field filter-field-wide">
@@ -35,14 +38,7 @@
       </div>
       <div class="filter-field">
         <label for="log_type">Log Type</label>
-        <select id="log_type" name="log_type">
-          <option value="">All log types</option>
-          {% for option in log_type_options %}
-            <option value="{{ option.value }}" {% if filters.log_type == option.value %}selected{% endif %}>
-              {{ option.label }}
-            </option>
-          {% endfor %}
-        </select>
+        <input id="log_type" name="log_type" type="text" value="{{ filters.log_type }}" placeholder="Exact event type (optional)" />
       </div>
       <div class="filter-field">
         <label for="platform">Platform</label>
@@ -82,37 +78,52 @@
         <table>
           <thead>
             <tr>
-              <th>Created At</th>
+              <th>Occurred At</th>
               <th>User</th>
               <th>Type</th>
-              <th>Permission</th>
-              <th>Entitlement</th>
+              <th>Label</th>
+              <th>Latitude</th>
+              <th>Longitude</th>
+              <th>Accuracy (m)</th>
+              <th>Speed (m/s)</th>
+              <th>Motion</th>
               <th>Platform</th>
-              <th>Location / Source</th>
-              <th>Error</th>
+              <th>Details</th>
             </tr>
           </thead>
           <tbody>
             {% for log in logs %}
               <tr>
-                <td
-                  class="timestamp-cell"
-                  data-timestamp="{{ log.created_at_raw }}"
-                >
-                  {{ log.created_at }}
-                </td>
+                <td class="timestamp-cell" data-timestamp="{{ log.occurred_at_raw }}">{{ log.occurred_at }}</td>
                 <td>{{ log.user_id }}</td>
-                <td class="{{ log.type_state }}">
-                  <span class="type-badge">
-                    <span class="type-icon">{{ log.type_icon }}</span>
-                    <span>{{ log.type }}</span>
-                  </span>
-                </td>
-                <td>{{ log.permission }}</td>
-                <td>{{ log.entitlement }}</td>
+                <td>{{ log.type }}</td>
+                <td>{{ log.label }}</td>
+                <td>{{ log.lat }}</td>
+                <td>{{ log.lng }}</td>
+                <td>{{ log.accuracy_m }}</td>
+                <td>{{ log.speed_ms }}</td>
+                <td>{{ log.motion_state }}</td>
                 <td>{{ log.platform }}</td>
-                <td>{{ log.location_source }}</td>
-                <td class="error-cell">{{ log.error }}</td>
+                <td>
+                  <details class="event-details">
+                    <summary>View details</summary>
+                    <dl>
+                      <dt>ID</dt><dd>{{ log.id }}</dd>
+                      <dt>Received at</dt><dd class="timestamp-cell" data-timestamp="{{ log.received_at_raw }}">{{ log.received_at }}</dd>
+                      <dt>Note</dt><dd>{{ log.note }}</dd>
+                      <dt>Session</dt><dd>{{ log.session_id }}</dd>
+                      <dt>App version</dt><dd>{{ log.app_version }}</dd>
+                      <dt>Config version</dt><dd>{{ log.config_version }}</dd>
+                      <dt>Client event ID</dt><dd>{{ log.client_event_id }}</dd>
+                    </dl>
+                    <strong>Payload</strong>
+                    {% if log.payload is not none %}
+                      <pre>{{ log.payload | tojson(indent=2) }}</pre>
+                    {% else %}
+                      <p>-</p>
+                    {% endif %}
+                  </details>
+                </td>
               </tr>
             {% endfor %}
           </tbody>
@@ -122,7 +133,9 @@
       <div class="empty-state">No logs found for the current filters.</div>
     {% endif %}
   </section>
+{% endblock %}
 
+{% block extra_scripts %}
   <script>
     (() => {
       const STORAGE_KEY = "alert-log-timezone";

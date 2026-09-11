@@ -6,7 +6,7 @@ from app.config import get_settings
 from app.routes import router
 
 
-app = FastAPI(title="Alert Log Viewer")
+app = FastAPI(title="Activity Log Viewer")
 settings = get_settings()
 app.add_middleware(
     SessionMiddleware,

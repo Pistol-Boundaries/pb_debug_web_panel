@@ -10,6 +10,6 @@ services:
       - key: SUPABASE_KEY
         sync: false
       - key: SUPABASE_LOGS_TABLE
-        value: alert_logs
+        value: activity_logs
       - key: DEFAULT_LOG_LIMIT
         value: 100

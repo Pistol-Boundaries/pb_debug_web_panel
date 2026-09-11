@@ -12,15 +12,7 @@ from app.supabase_client import fetch_recent_logs
 
 router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
-LOG_TYPES = [
-    "INITIALIZE",
-    "STARTED_TRACKING",
-    "TRACK_ONCE",
-    "STOPPED_TRACKING",
-    "LOCATION_RECEIVED"
-]
 PLATFORMS = ["ios", "android"]
-
 
 def _display_value(value: Any) -> str:
     if value is None:
@@ -28,23 +20,6 @@ def _display_value(value: Any) -> str:
     if isinstance(value, str) and not value.strip():
         return "-"
     return str(value)
-
-
-def _has_text(value: Any) -> bool:
-    return isinstance(value, str) and bool(value.strip())
-
-
-def _format_location_source(location: Any, source: Any) -> str:
-    location_text = str(location).strip() if _has_text(location) else ""
-    source_text = str(source).strip() if _has_text(source) else ""
-
-    if location_text and source_text:
-        return f"{location_text}: {source_text}"
-    if location_text:
-        return location_text
-    if source_text:
-        return source_text
-    return "-"
 
 
 def _format_timestamp(value: Any) -> str:
@@ -81,24 +56,24 @@ def _is_authenticated(request: Request) -> bool:
     return bool(request.session.get("authenticated"))
 
 
-def _title_case_type(value: str) -> str:
-    return value.replace("_", " ").title()
+def _login_response(request: Request) -> HTMLResponse:
+    return templates.TemplateResponse(
+        request,
+        "login.html",
+        {
+            "request": request,
+            "error_message": None,
+        },
+        status_code=401,
+    )
 
 
 @router.get("/", response_class=HTMLResponse)
 async def index(request: Request) -> HTMLResponse:
     if not _is_authenticated(request):
-        return templates.TemplateResponse(
-            request,
-            "login.html",
-            {
-                "request": request,
-                "error_message": None,
-            },
-            status_code=401,
-        )
+        return _login_response(request)
 
-    logs: list[dict[str, str]] = []
+    logs: list[dict[str, Any]] = []
     error_message: str | None = None
     start_date = request.query_params.get("start_date", "").strip()
     end_date = request.query_params.get("end_date", "").strip()
@@ -113,8 +88,6 @@ async def index(request: Request) -> HTMLResponse:
 
         if start_value and end_value and start_value > end_value:
             raise ValueError("Start date must be on or before end date.")
-        if log_type and log_type not in LOG_TYPES:
-            raise ValueError("Invalid event type.")
         if platform and platform not in PLATFORMS:
             raise ValueError("Invalid platform.")
 
@@ -133,22 +106,13 @@ async def index(request: Request) -> HTMLResponse:
             log_type=log_type or None,
             platform=platform or None,
         )
-        logs = [
-            {
-                "created_at": _format_timestamp(row.get("created_at")),
-                "created_at_raw": _display_value(row.get("created_at")),
-                "user_id": _display_value(row.get("user_id")),
-                "type": _display_value(row.get("type")),
-                "type_icon": "x" if _has_text(row.get("error")) else "✓",
-                "type_state": "type-error" if _has_text(row.get("error")) else "type-success",
-                "permission": _display_value(row.get("permission")),
-                "entitlement": _display_value(row.get("entitlement")),
-                "platform": _display_value(row.get("platform")),
-                "location_source": _format_location_source(row.get("location"), row.get("source")),
-                "error": _display_value(row.get("error")),
-            }
-            for row in rows
-        ]
+        for row in rows:
+            log = {key: _display_value(value) for key, value in row.items()}
+            for field in ("occurred_at", "received_at"):
+                log[field] = _format_timestamp(row.get(field))
+                log[f"{field}_raw"] = _display_value(row.get(field))
+            log["payload"] = row.get("payload")
+            logs.append(log)
     except ValueError as exc:
         error_message = str(exc)
     except Exception as exc:
@@ -168,15 +132,66 @@ async def index(request: Request) -> HTMLResponse:
                 "log_type": log_type,
                 "platform": platform,
             },
-            "log_type_options": [
-                {"value": value, "label": _title_case_type(value)}
-                for value in LOG_TYPES
-            ],
             "platform_options": [
                 {"value": "ios", "label": "iOS"},
                 {"value": "android", "label": "Android"},
             ],
         },
+    )
+
+
+@router.get("/map", response_class=HTMLResponse)
+async def map_view(request: Request) -> HTMLResponse:
+    if not _is_authenticated(request):
+        return _login_response(request)
+
+    points = []
+    error_message = None
+    filters = {
+        name: request.query_params.get(name, "").strip()
+        for name in ("user_id", "start_time", "end_time")
+    }
+    try:
+        bounds = {}
+        for name in ("start_time", "end_time"):
+            value = filters[name]
+            if not value:
+                bounds[name] = None
+                continue
+            try:
+                parsed = datetime.fromisoformat(value)
+            except ValueError:
+                raise ValueError("Enter a valid start/end date and time.")
+            bounds[name] = (parsed.replace(tzinfo=timezone.utc) if parsed.tzinfo is None
+                            else parsed.astimezone(timezone.utc))
+        start = bounds["start_time"]
+        end = bounds["end_time"]
+        if start and end and start >= end:
+            raise ValueError("Start time must be before end time.")
+        rows = fetch_recent_logs(
+            locations_only=True,
+            user_ids=[filters["user_id"]] if filters["user_id"] else None,
+            start_at=start.isoformat() if start else None,
+            end_before=end.isoformat() if end else None,
+        )
+        points = [
+            {
+                "lat": row["lat"],
+                "lng": row["lng"],
+                "label": f"{row.get('occurred_at')} · {row.get('user_id')}",
+                "user_id": row.get("user_id"),
+                "session_id": row.get("session_id"),
+            }
+            for row in reversed(rows)
+            if row.get("lat") is not None and row.get("lng") is not None
+        ]
+    except Exception as exc:
+        error_message = str(exc)
+
+    return templates.TemplateResponse(
+        request,
+        "map.html",
+        {"request": request, "points": points, "error_message": error_message, "filters": filters},
     )
 
 

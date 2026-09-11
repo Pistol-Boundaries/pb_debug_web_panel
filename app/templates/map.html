@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+
+{% block title %}Recent Map{% endblock %}
+
+{% block extra_head %}
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+    crossorigin=""
+  />
+{% endblock %}
+
+{% block content %}
+  <section class="panel map-panel">
+    <header class="panel-header map-panel-header">
+      <div>
+        <h1>Recent Locations</h1>
+        <p>Latest {{ points | length }} matching location records, shown oldest to newest. Times are UTC.</p>
+      </div>
+      <div class="panel-actions map-panel-actions">
+        <a href="/" class="secondary-button secondary-link">Back to logs</a>
+        <form method="post" action="/logout">
+          <button type="submit" class="secondary-button">Log out</button>
+        </form>
+      </div>
+    </header>
+
+    <form method="get" action="/map" class="filters">
+      <div class="filter-field">
+        <label for="user_id">User ID</label>
+        <input id="user_id" name="user_id" value="{{ filters.user_id }}" placeholder="All users" />
+      </div>
+      <div class="filter-field">
+        <label for="start_time">Start time (UTC, inclusive)</label>
+        <input id="start_time" name="start_time" type="datetime-local" step="1" value="{{ filters.start_time }}" />
+      </div>
+      <div class="filter-field">
+        <label for="end_time">End time (UTC, exclusive)</label>
+        <input id="end_time" name="end_time" type="datetime-local" step="1" value="{{ filters.end_time }}" />
+      </div>
+      <div class="filter-actions">
+        <button type="submit">Apply filters</button>
+        <a href="/map" class="secondary-button secondary-link">Clear</a>
+      </div>
+    </form>
+
+    {% if error_message %}
+      <div class="alert alert-error"><strong>Unable to load locations.</strong><span>{{ error_message }}</span></div>
+    {% elif not points %}
+      <div class="empty-state">No location records found.</div>
+    {% else %}
+    <section class="map-stack">
+      <div id="recent-map" class="map-canvas" aria-label="Recent locations map"></div>
+
+      <aside class="map-sidebar">
+        <h2>Points</h2>
+        <ol class="map-point-list">
+          {% for point in points %}
+            <li>
+              <strong>{{ point.label }}</strong>
+              <span>{{ point.lat }}, {{ point.lng }}</span>
+            </li>
+          {% endfor %}
+        </ol>
+      </aside>
+    </section>
+    {% endif %}
+  </section>
+{% endblock %}
+
+{% block extra_scripts %}
+  <script
+    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+    crossorigin=""
+  ></script>
+  <script>
+    (() => {
+      const points = {{ points | tojson }};
+      if (!points.length || typeof L === "undefined") {
+        return;
+      }
+
+      const firstPoint = points[0];
+      const map = L.map("recent-map").setView([firstPoint.lat, firstPoint.lng], 13);
+
+      L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        // Enlarge existing tiles beyond the provider's native zoom limit.
+        maxNativeZoom: 19,
+        maxZoom: 23,
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+      }).addTo(map);
+
+      const latLngs = points.map((point) => [point.lat, point.lng]);
+      const tracks = new Map();
+      points.forEach((point) => {
+        if (!point.session_id) return;
+        const key = JSON.stringify([point.user_id, point.session_id]);
+        if (!tracks.has(key)) tracks.set(key, []);
+        tracks.get(key).push([point.lat, point.lng]);
+      });
+      tracks.forEach((track) => {
+        if (track.length > 1) L.polyline(track, { color: "#2e6fbb", weight: 4 }).addTo(map);
+      });
+
+      points.forEach((point, index) => {
+        const popup = document.createElement("div");
+        popup.textContent = `${index + 1}. ${point.label} — ${point.lat}, ${point.lng}`;
+        L.marker([point.lat, point.lng])
+          .addTo(map)
+          .bindPopup(popup);
+      });
+
+      map.fitBounds(L.latLngBounds(latLngs), { padding: [24, 24], maxZoom: 17 });
+    })();
+  </script>
+{% endblock %}
