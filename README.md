@@ -1,6 +1,20 @@
-# Alert Log Viewer
+# Activity Log Viewer
 
-A very small FastAPI app that renders the latest rows from the Supabase `alert_logs` table.
+A very small FastAPI app that renders the latest rows from the Supabase `activity_logs` table.
+
+The viewer reads `activity_logs` and orders newest first by `occurred_at` (then `id`).
+Date filters use UTC event time; the timezone selector changes timestamp display only.
+Event type filtering accepts an exact value rather than a fixed list.
+Coordinates, accuracy (m), speed (m/s), and motion are shown in the table; expand
+View details for receipt time, notes, session/version identifiers, and JSON payload.
+The placeholder map is no longer linked or served.
+
+When updating an existing deployment, set `SUPABASE_LOGS_TABLE=activity_logs`
+in its environment and restart the app. The configured Supabase key must have
+read access to the new table. This change does not create tables or move old data.
+
+Run the viewer checks without contacting external services:
+`.venv/bin/python -m pytest tests/test_activity_logs.py -q`
 
 ## Setup
 
@@ -24,7 +38,7 @@ You can also run it without activating the virtual environment:
 - `SUPABASE_URL`
 - `SUPABASE_KEY`
 - `SUPABASE_SERVICE_ROLE_KEY` for direct DB integration tests
-- `SUPABASE_LOGS_TABLE` defaults to `alert_logs`
+- `SUPABASE_LOGS_TABLE` defaults to `activity_logs`
 - `DEFAULT_LOG_LIMIT` defaults to `100`
 - `APP_PASSWORD` defaults to `arsenal`
 - `SESSION_SECRET` should be set to a random secret in production
@@ -62,7 +76,7 @@ Set these environment variables in Render:
 
 - `SUPABASE_URL`
 - `SUPABASE_KEY`
-- `SUPABASE_LOGS_TABLE=alert_logs`
+- `SUPABASE_LOGS_TABLE=activity_logs`
 - `DEFAULT_LOG_LIMIT=100`
 - `APP_PASSWORD=arsenal`
 - `SESSION_SECRET=<random-secret>`

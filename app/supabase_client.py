@@ -26,15 +26,16 @@ def fetch_recent_logs(
 
     query = (
         client.table(settings.supabase_logs_table)
-        .select("id, created_at, user_id, type, permission, entitlement, platform, location, source, error")
-        .order("created_at", desc=True)
+        .select("id, user_id, occurred_at, received_at, type, label, note, lat, lng, accuracy_m, speed_ms, motion_state, session_id, platform, app_version, config_version, client_event_id, payload")
+        .order("occurred_at", desc=True)
+        .order("id", desc=True)
         .limit(query_limit)
     )
 
     if start_at:
-        query = query.gte("created_at", start_at)
+        query = query.gte("occurred_at", start_at)
     if end_before:
-        query = query.lt("created_at", end_before)
+        query = query.lt("occurred_at", end_before)
     if user_ids:
         if len(user_ids) == 1:
             query = query.eq("user_id", user_ids[0])

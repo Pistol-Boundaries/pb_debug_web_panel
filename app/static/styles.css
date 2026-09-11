@@ -257,40 +257,12 @@ tbody tr:nth-child(even) {
   background: rgba(217, 210, 198, 0.18);
 }
 
-.type-success {
-  color: #1f7a34;
-  font-weight: 600;
-}
-
-.type-error {
-  color: #b0302f;
-  font-weight: 600;
-}
-
-.type-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.type-icon {
-  width: 1.35rem;
-  height: 1.35rem;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 999px;
-  font-size: 0.85rem;
-  font-weight: 700;
-  line-height: 1;
-  border: 1px solid currentColor;
-}
-
-.error-cell {
-  min-width: 320px;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
+.event-details { min-width: 140px; }
+.event-details[open] { width: 360px; }
+.event-details summary { cursor: pointer; }
+.event-details dt { font-weight: 600; margin-top: 0.75rem; }
+.event-details dd { margin: 0.25rem 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.event-details pre { max-height: 360px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
 
 .empty-state {
   padding: 2rem 1.5rem;
