@@ -16,7 +16,7 @@
     <header class="panel-header map-panel-header">
       <div>
         <h1>Recent Locations</h1>
-        <p>Latest {{ points | length }} matching location records, shown oldest to newest. Times are UTC.</p>
+        <p>Showing {{ points | length }} of the latest 500 matching location updates, oldest to newest. Times are UTC.</p>
       </div>
       <div class="panel-actions map-panel-actions">
         <a href="/" class="secondary-button secondary-link">Back to logs</a>
@@ -107,7 +107,13 @@
       points.forEach((point, index) => {
         const popup = document.createElement("div");
         popup.textContent = `${index + 1}. ${point.label} — ${point.lat}, ${point.lng}`;
-        L.marker([point.lat, point.lng])
+        L.circleMarker([point.lat, point.lng], {
+          radius: 4,
+          color: "#fff",
+          weight: 1,
+          fillColor: "#2e6fbb",
+          fillOpacity: 0.9,
+        })
           .addTo(map)
           .bindPopup(popup);
       });

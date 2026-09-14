@@ -169,6 +169,7 @@ async def map_view(request: Request) -> HTMLResponse:
         if start and end and start >= end:
             raise ValueError("Start time must be before end time.")
         rows = fetch_recent_logs(
+            limit=500,
             locations_only=True,
             user_ids=[filters["user_id"]] if filters["user_id"] else None,
             start_at=start.isoformat() if start else None,
