@@ -83,7 +83,7 @@ def test_map_locations_empty_and_error(client, monkeypatch):
     monkeypatch.setattr(routes, 'fetch_recent_logs', fetch)
     response = client.get('/map')
     assert response.status_code == 200
-    fetch.assert_called_once_with(locations_only=True, user_ids=None, start_at=None, end_before=None)
+    fetch.assert_called_once_with(limit=500, locations_only=True, user_ids=None, start_at=None, end_before=None)
     assert response.context['points'][0]['lat'] == 0
     assert 'Static debug points' not in response.text
     fetch.return_value = []
@@ -98,7 +98,7 @@ def test_map_filters(client, monkeypatch):
     fetch = MagicMock(return_value=[])
     monkeypatch.setattr(routes, 'fetch_recent_logs', fetch)
     response = client.get('/map', params={'user_id': ' walker ', 'start_time': '2026-09-11T14:43:00', 'end_time': '2026-09-11T14:57:00'})
-    fetch.assert_called_once_with(locations_only=True, user_ids=['walker'], start_at='2026-09-11T14:43:00+00:00', end_before='2026-09-11T14:57:00+00:00')
+    fetch.assert_called_once_with(limit=500, locations_only=True, user_ids=['walker'], start_at='2026-09-11T14:43:00+00:00', end_before='2026-09-11T14:57:00+00:00')
     assert 'value="walker"' in response.text
     assert 'value="2026-09-11T14:43:00"' in response.text
 
