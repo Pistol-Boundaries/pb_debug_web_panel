@@ -61,7 +61,7 @@
       </div>
       <div class="filter-actions">
         <button type="submit">Apply filters</button>
-        <button type="submit" class="secondary-button">Refresh</button>
+        <a href="{{ current_page_url }}" class="secondary-button secondary-link">Refresh</a>
         <a href="/" class="secondary-button secondary-link">Clear</a>
       </div>
     </form>
@@ -71,6 +71,14 @@
         <strong>Unable to load logs.</strong>
         <span>{{ error_message }}</span>
       </div>
+    {% endif %}
+
+    {% if not error_message %}
+      <nav class="pagination" aria-label="Log pages">
+        {% if newer_url %}<a href="{{ newer_url }}" class="secondary-button secondary-link">← Newer</a>{% endif %}
+        <span>Page {{ page }} · {{ logs | length }} logs</span>
+        {% if older_url %}<a href="{{ older_url }}" class="secondary-button secondary-link">Older →</a>{% endif %}
+      </nav>
     {% endif %}
 
     {% if logs %}
@@ -131,6 +139,13 @@
       </div>
     {% elif not error_message %}
       <div class="empty-state">No logs found for the current filters.</div>
+    {% endif %}
+    {% if not error_message %}
+      <nav class="pagination" aria-label="Log pages">
+        {% if newer_url %}<a href="{{ newer_url }}" class="secondary-button secondary-link">← Newer</a>{% endif %}
+        <span>Page {{ page }} · {{ logs | length }} logs</span>
+        {% if older_url %}<a href="{{ older_url }}" class="secondary-button secondary-link">Older →</a>{% endif %}
+      </nav>
     {% endif %}
   </section>
 {% endblock %}

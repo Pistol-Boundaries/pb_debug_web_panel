@@ -16,7 +16,7 @@ def client(monkeypatch):
     app.include_router(routes.router)
     from fastapi.staticfiles import StaticFiles
     app.mount('/static', StaticFiles(directory='app/static'), name='static')
-    monkeypatch.setattr(routes, 'get_settings', lambda: SimpleNamespace(app_password='test'))
+    monkeypatch.setattr(routes, 'get_settings', lambda: SimpleNamespace(app_password='test', default_log_limit=100))
     with TestClient(app) as client:
         client.post('/login', data={'password': 'test'}, follow_redirects=False)
         yield client
@@ -24,7 +24,7 @@ def client(monkeypatch):
 
 def test_query_uses_activity_schema(monkeypatch):
     query = MagicMock()
-    for method in ('select', 'order', 'limit', 'gte', 'lt', 'eq', 'in_'):
+    for method in ('select', 'order', 'range', 'gte', 'lt', 'eq', 'in_'):
         getattr(query, method).return_value = query
     query.execute.return_value = SimpleNamespace(data=[])
     db = MagicMock()
@@ -50,7 +50,7 @@ def test_empty_and_new_event_filter(client, monkeypatch):
     assert response.status_code == 200
     assert 'No logs found' in response.text
     assert 'Recent map' in response.text
-    fetch.assert_called_once_with(start_at='2026-09-11T00:00:00+00:00', end_before='2026-09-12T00:00:00+00:00', user_ids=['a','b'], log_type='new_event', platform=None)
+    fetch.assert_called_once_with(limit=101, offset=0, start_at='2026-09-11T00:00:00+00:00', end_before='2026-09-12T00:00:00+00:00', user_ids=['a','b'], log_type='new_event', platform=None)
 
 
 @pytest.mark.parametrize('coordinates', [(0, 0), (None, None)])
@@ -122,3 +122,32 @@ def test_map_one_sided_time_filter(client, monkeypatch, field, expected):
     monkeypatch.setattr(routes, 'fetch_recent_logs', fetch)
     client.get('/map', params={field: '2026-09-11T14:00'})
     assert fetch.call_args.kwargs[expected] == '2026-09-11T14:00:00+00:00'
+
+
+def test_log_pages_preserve_filters(client, monkeypatch):
+    row = dict(id=1, occurred_at=None, received_at=None, payload=None)
+    fetch = MagicMock(return_value=[row] * 101)
+    monkeypatch.setattr(routes, 'fetch_recent_logs', fetch)
+    response = client.get('/', params={'page': 2, 'users': 'a,b', 'log_type': 'location_reading'})
+    assert len(response.context['logs']) == 100
+    assert fetch.call_args.kwargs['offset'] == 100
+    assert fetch.call_args.kwargs['limit'] == 101
+    assert 'page=3' in response.context['older_url']
+    assert 'users=a%2Cb' in response.context['older_url']
+    assert 'page=1' in response.context['newer_url']
+    fetch.return_value = [row]
+    response = client.get('/?page=3')
+    assert response.context['older_url'] is None
+    assert response.context['newer_url'] is not None
+    fetch.return_value = []
+    response = client.get('/?page=4')
+    assert response.context['newer_url'] is not None
+    assert response.context['older_url'] is None
+
+
+@pytest.mark.parametrize('page', ['0', '-1', 'oops'])
+def test_invalid_log_page(client, monkeypatch, page):
+    fetch = MagicMock()
+    monkeypatch.setattr(routes, 'fetch_recent_logs', fetch)
+    assert 'Page must be a positive whole number' in client.get('/', params={'page': page}).text
+    fetch.assert_not_called()

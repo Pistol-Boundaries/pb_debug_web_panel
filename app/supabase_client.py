@@ -20,6 +20,7 @@ def fetch_recent_logs(
     log_type: str | None = None,
     platform: str | None = None,
     locations_only: bool = False,
+    offset: int = 0,
 ) -> list[dict[str, Any]]:
     settings = get_settings()
     client = get_supabase_client()
@@ -30,7 +31,7 @@ def fetch_recent_logs(
         .select("id, user_id, occurred_at, received_at, type, label, note, lat, lng, accuracy_m, speed_ms, motion_state, session_id, platform, app_version, config_version, client_event_id, payload")
         .order("occurred_at", desc=True)
         .order("id", desc=True)
-        .limit(query_limit)
+        .range(offset, offset + query_limit - 1)
     )
 
     if locations_only:

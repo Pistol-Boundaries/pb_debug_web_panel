@@ -1,5 +1,6 @@
 from datetime import date, datetime, time, timedelta, timezone
 from hmac import compare_digest
+from urllib.parse import urlencode
 from typing import Any
 
 from fastapi import APIRouter, Form, Request
@@ -74,6 +75,9 @@ async def index(request: Request) -> HTMLResponse:
         return _login_response(request)
 
     logs: list[dict[str, Any]] = []
+    page = 1
+    has_older = False
+    page_size = get_settings().default_log_limit
     error_message: str | None = None
     start_date = request.query_params.get("start_date", "").strip()
     end_date = request.query_params.get("end_date", "").strip()
@@ -82,6 +86,12 @@ async def index(request: Request) -> HTMLResponse:
     platform = request.query_params.get("platform", "").strip().lower()
 
     try:
+        try:
+            page = int(request.query_params.get("page", "1"))
+        except ValueError:
+            raise ValueError("Page must be a positive whole number.")
+        if page < 1:
+            raise ValueError("Page must be a positive whole number.")
         start_value = _parse_date(start_date) if start_date else None
         end_value = _parse_date(end_date) if end_date else None
         user_ids = _parse_users(users)
@@ -100,13 +110,16 @@ async def index(request: Request) -> HTMLResponse:
             end_before = datetime.combine(next_day, time.min, tzinfo=timezone.utc).isoformat()
 
         rows = fetch_recent_logs(
+            limit=page_size + 1,
+            offset=(page - 1) * page_size,
             start_at=start_at,
             end_before=end_before,
             user_ids=user_ids,
             log_type=log_type or None,
             platform=platform or None,
         )
-        for row in rows:
+        has_older = len(rows) > page_size
+        for row in rows[:page_size]:
             log = {key: _display_value(value) for key, value in row.items()}
             for field in ("occurred_at", "received_at"):
                 log[field] = _format_timestamp(row.get(field))
@@ -118,12 +131,21 @@ async def index(request: Request) -> HTMLResponse:
     except Exception as exc:
         error_message = str(exc)
 
+    def page_url(number: int) -> str:
+        params = dict(request.query_params)
+        params["page"] = str(number)
+        return "/?" + urlencode(params)
+
     return templates.TemplateResponse(
         request,
         "index.html",
         {
             "request": request,
             "logs": logs,
+            "page": page,
+            "newer_url": page_url(page - 1) if page > 1 else None,
+            "older_url": page_url(page + 1) if has_older else None,
+            "current_page_url": page_url(page),
             "error_message": error_message,
             "filters": {
                 "start_date": start_date,

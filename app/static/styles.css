@@ -362,3 +362,5 @@ tbody tr:nth-child(even) {
     padding: 0.75rem;
   }
 }
+
+.pagination { display: flex; align-items: center; justify-content: center; gap: 1rem; flex-wrap: wrap; padding: 1rem 1.5rem; }
