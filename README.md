@@ -8,7 +8,7 @@ Event type filtering accepts an exact value rather than a fixed list.
 Coordinates, accuracy (m), speed (m/s), and motion are shown in the table; expand
 View details for receipt time, notes, session/version identifiers, and JSON payload.
 Recent map shows the latest location records across all users, with separate lines
-for each user/session. Filter by exact user ID and optional UTC start/end times
+for each user/session. Filter by exact user ID and optional browser-local start/end times (converted to UTC for querying)
 (start inclusive, end exclusive). It shows up to 500 location updates after filtering, using small clickable dots
 and does not inherit log filters.
 

@@ -151,3 +151,16 @@ def test_invalid_log_page(client, monkeypatch, page):
     monkeypatch.setattr(routes, 'fetch_recent_logs', fetch)
     assert 'Page must be a positive whole number' in client.get('/', params={'page': page}).text
     fetch.assert_not_called()
+
+
+@pytest.mark.parametrize('start,end,expected_start,expected_end', [
+    ('2026-09-14T20:30:00-04:00', '2026-09-14T21:00:00-04:00', '2026-09-15T00:30:00+00:00', '2026-09-15T01:00:00+00:00'),
+    ('2026-01-14T20:30:00-05:00', '2026-01-14T21:00:00-05:00', '2026-01-15T01:30:00+00:00', '2026-01-15T02:00:00+00:00'),
+])
+def test_map_local_time_offsets(client, monkeypatch, start, end, expected_start, expected_end):
+    fetch = MagicMock(return_value=[])
+    monkeypatch.setattr(routes, 'fetch_recent_logs', fetch)
+    response = client.get('/map', params={'start_time': start, 'end_time': end})
+    assert fetch.call_args.kwargs['start_at'] == expected_start
+    assert fetch.call_args.kwargs['end_before'] == expected_end
+    assert 'Start time (local, inclusive)' in response.text

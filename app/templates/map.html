@@ -16,7 +16,7 @@
     <header class="panel-header map-panel-header">
       <div>
         <h1>Recent Locations</h1>
-        <p>Showing {{ points | length }} of the latest 500 matching location updates, oldest to newest. Times are UTC.</p>
+        <p>Showing {{ points | length }} of the latest 500 matching location updates, oldest to newest. Times use your browser timezone: <span id="map-timezone">local time</span>.</p>
       </div>
       <div class="panel-actions map-panel-actions">
         <a href="/" class="secondary-button secondary-link">Back to logs</a>
@@ -26,18 +26,20 @@
       </div>
     </header>
 
-    <form method="get" action="/map" class="filters">
+    <form method="get" action="/map" class="filters" id="map-filters">
       <div class="filter-field">
         <label for="user_id">User ID</label>
         <input id="user_id" name="user_id" value="{{ filters.user_id }}" placeholder="All users" />
       </div>
       <div class="filter-field">
-        <label for="start_time">Start time (UTC, inclusive)</label>
-        <input id="start_time" name="start_time" type="datetime-local" step="1" value="{{ filters.start_time }}" />
+        <label for="start_time">Start time (local, inclusive)</label>
+        <input id="start_time" type="datetime-local" step="1" />
+        <input id="start_time_utc" name="start_time" type="hidden" value="{{ filters.start_time }}" />
       </div>
       <div class="filter-field">
-        <label for="end_time">End time (UTC, exclusive)</label>
-        <input id="end_time" name="end_time" type="datetime-local" step="1" value="{{ filters.end_time }}" />
+        <label for="end_time">End time (local, exclusive)</label>
+        <input id="end_time" type="datetime-local" step="1" />
+        <input id="end_time_utc" name="end_time" type="hidden" value="{{ filters.end_time }}" />
       </div>
       <div class="filter-actions">
         <button type="submit">Apply filters</button>
@@ -77,7 +79,39 @@
   ></script>
   <script>
     (() => {
+      const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      document.getElementById("map-timezone").textContent = zone;
+      function parseTimestamp(raw) {
+        // Older saved URLs used UTC without an explicit offset.
+        let value = raw.trim().replace(" ", "T");
+        if (/[+-]\d{2}$/.test(value)) value += ":00";
+        if (!/(Z|[+-]\d{2}:?\d{2})$/i.test(value)) value += "Z";
+        return new Date(value);
+      }
+      const timeFields = ["start_time", "end_time"];
+      const pad = (value) => String(value).padStart(2, "0");
+      timeFields.forEach((name) => {
+        const raw = document.getElementById(`${name}_utc`).value;
+        if (!raw) return;
+        const date = parseTimestamp(raw);
+        if (Number.isNaN(date.getTime())) return;
+        document.getElementById(name).value = `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+      });
+      document.getElementById("map-filters").addEventListener("submit", () => {
+        timeFields.forEach((name) => {
+          const value = document.getElementById(name).value;
+          document.getElementById(`${name}_utc`).value = value ? new Date(value).toISOString() : "";
+        });
+      });
       const points = {{ points | tojson }};
+      points.forEach((point, index) => {
+        const date = parseTimestamp(point.occurred_at || "");
+        if (!Number.isNaN(date.getTime())) {
+          point.label = `${date.toLocaleString()} · ${point.user_id}`;
+          const label = document.querySelectorAll(".map-point-list strong")[index];
+          if (label) label.textContent = point.label;
+        }
+      });
       if (!points.length || typeof L === "undefined") {
         return;
       }

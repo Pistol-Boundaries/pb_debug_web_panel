@@ -199,6 +199,7 @@ async def map_view(request: Request) -> HTMLResponse:
         )
         points = [
             {
+                "occurred_at": row.get("occurred_at"),
                 "lat": row["lat"],
                 "lng": row["lng"],
                 "label": f"{row.get('occurred_at')} · {row.get('user_id')}",
