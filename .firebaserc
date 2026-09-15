@@ -1,0 +1,15 @@
+{
+  "projects": {
+    "default": "pistol-boundaries-sb"
+  },
+  "targets": {
+    "pistol-boundaries-sb": {
+      "hosting": {
+        "debug-panel": [
+          "pb-debug-panel"
+        ]
+      }
+    }
+  },
+  "etags": {}
+}
