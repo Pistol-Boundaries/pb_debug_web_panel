@@ -16,7 +16,7 @@
     <header class="panel-header map-panel-header">
       <div>
         <h1>Recent Locations</h1>
-        <p>Showing {{ points | length }} of the latest 500 matching location updates, oldest to newest. Times use your browser timezone: <span id="map-timezone">local time</span>.</p>
+        <p>Showing {{ points | length }} matching location updates (up to 5,000), oldest to newest. Times use your browser timezone: <span id="map-timezone">local time</span>.</p>
       </div>
       <div class="panel-actions map-panel-actions">
         <a href="/" class="secondary-button secondary-link">Back to logs</a>
@@ -47,6 +47,9 @@
       </div>
     </form>
 
+    {% if points | length >= 5000 %}
+      <p class="empty-state">Showing the latest 5,000 locations. Narrow the time range or select a user to see a smaller set.</p>
+    {% endif %}
     {% if error_message %}
       <div class="alert alert-error"><strong>Unable to load locations.</strong><span>{{ error_message }}</span></div>
     {% elif not points %}
@@ -104,11 +107,12 @@
         });
       });
       const points = {{ points | tojson }};
+      const pointLabels = document.querySelectorAll(".map-point-list strong");
       points.forEach((point, index) => {
         const date = parseTimestamp(point.occurred_at || "");
         if (!Number.isNaN(date.getTime())) {
           point.label = `${date.toLocaleString()} · ${point.user_id}`;
-          const label = document.querySelectorAll(".map-point-list strong")[index];
+          const label = pointLabels[index];
           if (label) label.textContent = point.label;
         }
       });
@@ -117,7 +121,7 @@
       }
 
       const firstPoint = points[0];
-      const map = L.map("recent-map").setView([firstPoint.lat, firstPoint.lng], 13);
+      const map = L.map("recent-map", { preferCanvas: true }).setView([firstPoint.lat, firstPoint.lng], 13);
 
       L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
         // Enlarge existing tiles beyond the provider's native zoom limit.

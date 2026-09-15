@@ -12,7 +12,7 @@ Time fields can be edited or cleared; Reset to last hour restores the default.
 
 Recent map shows the latest location records across all users, with separate lines
 for each user/session. Filter by exact user ID and optional browser-local start/end times (converted to UTC for querying)
-(start inclusive, end exclusive). It shows up to 500 location updates after filtering, using small clickable dots
+(start inclusive, end exclusive). It shows up to 5,000 location updates after filtering, using small clickable dots
 and does not inherit log filters.
 
 When updating an existing deployment, set `SUPABASE_LOGS_TABLE=activity_logs`

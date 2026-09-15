@@ -76,14 +76,14 @@ def test_invalid_dates_and_read_error(client, monkeypatch):
 
 
 def test_map_locations_empty_and_error(client, monkeypatch):
-    fetch = MagicMock(return_value=[
+    fetch = MagicMock(side_effect=[[
         dict(lat=1, lng=2, occurred_at="later", user_id="u", session_id="s"),
         dict(lat=0, lng=0, occurred_at="earlier", user_id="u", session_id="s"),
-    ])
+    ], []])
     monkeypatch.setattr(routes, 'fetch_recent_logs', fetch)
     response = client.get('/map')
     assert response.status_code == 200
-    assert fetch.call_count == 1
+    assert fetch.call_count == 2
     from datetime import datetime, timedelta, timezone
     args = fetch.call_args.kwargs
     assert args['limit'] == 500 and args['locations_only'] is True
@@ -93,6 +93,7 @@ def test_map_locations_empty_and_error(client, monkeypatch):
     assert abs((datetime.now(timezone.utc) - end).total_seconds()) < 5
     assert response.context['points'][0]['lat'] == 0
     assert 'Static debug points' not in response.text
+    fetch.side_effect = None
     fetch.return_value = []
     assert 'No location records found' in client.get('/map').text
     fetch.side_effect = RuntimeError('Read unavailable')
@@ -105,7 +106,7 @@ def test_map_filters(client, monkeypatch):
     fetch = MagicMock(return_value=[])
     monkeypatch.setattr(routes, 'fetch_recent_logs', fetch)
     response = client.get('/map', params={'user_id': ' walker ', 'start_time': '2026-09-11T14:43:00', 'end_time': '2026-09-11T14:57:00'})
-    fetch.assert_called_once_with(limit=500, locations_only=True, user_ids=['walker'], start_at='2026-09-11T14:43:00+00:00', end_before='2026-09-11T14:57:00+00:00')
+    fetch.assert_called_once_with(limit=500, offset=0, locations_only=True, user_ids=['walker'], start_at='2026-09-11T14:43:00+00:00', end_before='2026-09-11T14:57:00+00:00')
     assert 'value="walker"' in response.text
     assert 'value="2026-09-11T14:43:00"' in response.text
 
@@ -180,3 +181,18 @@ def test_map_explicit_empty_times_remain_unrestricted(client, monkeypatch):
     assert fetch.call_args.kwargs['start_at'] is None
     assert fetch.call_args.kwargs['end_before'] is None
     assert response.context['filters']['start_time'] == ''
+
+
+def test_map_fetches_multiple_batches_and_caps(client, monkeypatch):
+    row = dict(lat=0, lng=0, occurred_at='2026-09-15T12:00:00Z', user_id='u', session_id='s')
+    fetch = MagicMock(side_effect=[[row] * 500, [row] * 100, []])
+    monkeypatch.setattr(routes, 'fetch_recent_logs', fetch)
+    response = client.get('/map')
+    assert len(response.context['points']) == 600
+    assert [call.kwargs['offset'] for call in fetch.call_args_list] == [0, 500, 600]
+    fetch.reset_mock(side_effect=True)
+    fetch.return_value = [row] * 500
+    response = client.get('/map')
+    assert len(response.context['points']) == 5000
+    assert fetch.call_count == 10
+    assert 'Narrow the time range' in response.text

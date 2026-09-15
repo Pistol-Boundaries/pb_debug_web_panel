@@ -195,13 +195,19 @@ async def map_view(request: Request) -> HTMLResponse:
         end = bounds["end_time"]
         if start and end and start >= end:
             raise ValueError("Start time must be before end time.")
-        rows = fetch_recent_logs(
-            limit=500,
-            locations_only=True,
-            user_ids=[filters["user_id"]] if filters["user_id"] else None,
-            start_at=start.isoformat() if start else None,
-            end_before=end.isoformat() if end else None,
-        )
+        rows = []
+        while len(rows) < 5000:
+            batch = fetch_recent_logs(
+                limit=min(500, 5000 - len(rows)),
+                offset=len(rows),
+                locations_only=True,
+                user_ids=[filters["user_id"]] if filters["user_id"] else None,
+                start_at=start.isoformat() if start else None,
+                end_before=end.isoformat() if end else None,
+            )
+            if not batch:
+                break
+            rows.extend(batch)
         points = [
             {
                 "occurred_at": row.get("occurred_at"),
