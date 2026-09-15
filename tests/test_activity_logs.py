@@ -83,7 +83,14 @@ def test_map_locations_empty_and_error(client, monkeypatch):
     monkeypatch.setattr(routes, 'fetch_recent_logs', fetch)
     response = client.get('/map')
     assert response.status_code == 200
-    fetch.assert_called_once_with(limit=500, locations_only=True, user_ids=None, start_at=None, end_before=None)
+    assert fetch.call_count == 1
+    from datetime import datetime, timedelta, timezone
+    args = fetch.call_args.kwargs
+    assert args['limit'] == 500 and args['locations_only'] is True
+    start = datetime.fromisoformat(args['start_at'])
+    end = datetime.fromisoformat(args['end_before'])
+    assert end - start == timedelta(hours=1)
+    assert abs((datetime.now(timezone.utc) - end).total_seconds()) < 5
     assert response.context['points'][0]['lat'] == 0
     assert 'Static debug points' not in response.text
     fetch.return_value = []
@@ -164,3 +171,12 @@ def test_map_local_time_offsets(client, monkeypatch, start, end, expected_start,
     assert fetch.call_args.kwargs['start_at'] == expected_start
     assert fetch.call_args.kwargs['end_before'] == expected_end
     assert 'Start time (local, inclusive)' in response.text
+
+
+def test_map_explicit_empty_times_remain_unrestricted(client, monkeypatch):
+    fetch = MagicMock(return_value=[])
+    monkeypatch.setattr(routes, 'fetch_recent_logs', fetch)
+    response = client.get('/map?start_time=&end_time=')
+    assert fetch.call_args.kwargs['start_at'] is None
+    assert fetch.call_args.kwargs['end_before'] is None
+    assert response.context['filters']['start_time'] == ''

@@ -7,6 +7,9 @@ Date filters use UTC event time; the timezone selector changes timestamp display
 Event type filtering accepts an exact value rather than a fixed list.
 Coordinates, accuracy (m), speed (m/s), and motion are shown in the table; expand
 View details for receipt time, notes, session/version identifiers, and JSON payload.
+The map defaults to the past hour ending now, displayed in browser-local time.
+Time fields can be edited or cleared; Reset to last hour restores the default.
+
 Recent map shows the latest location records across all users, with separate lines
 for each user/session. Filter by exact user ID and optional browser-local start/end times (converted to UTC for querying)
 (start inclusive, end exclusive). It shows up to 500 location updates after filtering, using small clickable dots

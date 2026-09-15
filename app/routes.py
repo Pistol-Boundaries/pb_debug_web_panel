@@ -173,6 +173,11 @@ async def map_view(request: Request) -> HTMLResponse:
         name: request.query_params.get(name, "").strip()
         for name in ("user_id", "start_time", "end_time")
     }
+    # Only default a new visit; explicit blank fields mean unrestricted time.
+    if "start_time" not in request.query_params and "end_time" not in request.query_params:
+        now = datetime.now(timezone.utc).replace(microsecond=0)
+        filters["start_time"] = (now - timedelta(hours=1)).isoformat()
+        filters["end_time"] = now.isoformat()
     try:
         bounds = {}
         for name in ("start_time", "end_time"):
