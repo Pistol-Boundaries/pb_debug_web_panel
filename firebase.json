@@ -1,0 +1,20 @@
+{
+  "hosting": {
+    "target": "debug-panel",
+    "public": "firebase-public",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "rewrites": [
+      {
+        "source": "**",
+        "run": {
+          "serviceId": "activity-log-viewer",
+          "region": "us-central1"
+        }
+      }
+    ]
+  }
+}

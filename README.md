@@ -86,3 +86,15 @@ Set these environment variables in Render:
 - `DEFAULT_LOG_LIMIT=100`
 - `APP_PASSWORD=arsenal`
 - `SESSION_SECRET=<random-secret>`
+
+## Deploying on Firebase
+
+Deploy updates to the debug panel:
+
+```sh
+./scripts/deploy.sh
+```
+
+This updates Cloud Run and only the `pb-debug-panel` Hosting site, preserving the
+existing server configuration. See [FIREBASE_DEPLOY.md](FIREBASE_DEPLOY.md) for
+CLI authentication and initial setup.
