@@ -241,3 +241,19 @@ def test_filter_options_batches_and_cache(monkeypatch):
     query.gt.assert_any_call('user_id', 'a')
     assert supabase_client.fetch_filter_options() == expected
     assert query.execute.call_count == 5
+
+
+def test_map_multi_user_dropdown(client, monkeypatch):
+    monkeypatch.setattr(routes, 'fetch_filter_options', lambda: {'user_id': ['a', 'b'], 'type': []})
+    fetch = MagicMock(return_value=[])
+    monkeypatch.setattr(routes, 'fetch_recent_logs', fetch)
+    response = client.get('/map?user_id=a&user_id=b&start_time=&end_time=')
+    assert fetch.call_args.kwargs['user_ids'] == ['a', 'b']
+    assert fetch.call_args.kwargs['start_at'] is None
+    assert response.context['selected_users'] == ['a', 'b']
+    assert 'value="a" checked' in response.text
+    assert 'value="b" checked' in response.text
+    monkeypatch.setattr(routes, 'fetch_filter_options', MagicMock(side_effect=RuntimeError('offline')))
+    response = client.get('/map?user_id=older-user')
+    assert 'value="older-user" checked' in response.text
+    assert 'Could not load all user choices' in response.text

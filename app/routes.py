@@ -188,6 +188,7 @@ async def map_view(request: Request) -> HTMLResponse:
         name: request.query_params.get(name, "").strip()
         for name in ("user_id", "start_time", "end_time")
     }
+    selected_users = list(dict.fromkeys(value.strip() for value in request.query_params.getlist("user_id") if value.strip()))
     # Only default a new visit; explicit blank fields mean unrestricted time.
     if "start_time" not in request.query_params and "end_time" not in request.query_params:
         now = datetime.now(timezone.utc).replace(microsecond=0)
@@ -216,7 +217,7 @@ async def map_view(request: Request) -> HTMLResponse:
                 limit=min(500, 5000 - len(rows)),
                 offset=len(rows),
                 locations_only=True,
-                user_ids=[filters["user_id"]] if filters["user_id"] else None,
+                user_ids=selected_users or None,
                 start_at=start.isoformat() if start else None,
                 end_before=end.isoformat() if end else None,
             )
@@ -238,10 +239,19 @@ async def map_view(request: Request) -> HTMLResponse:
     except Exception as exc:
         error_message = str(exc)
 
+    options_warning = None
+    try:
+        available_users = fetch_filter_options()["user_id"]
+    except Exception:
+        available_users = []
+        options_warning = "Could not load all user choices. Showing users from this map and current selections."
+    user_options = sorted(set(available_users) | set(selected_users) | {point["user_id"] for point in points if point.get("user_id")})
+
     return templates.TemplateResponse(
         request,
         "map.html",
-        {"request": request, "points": points, "error_message": error_message, "filters": filters},
+        {"request": request, "points": points, "error_message": error_message, "filters": filters,
+         "selected_users": selected_users, "user_options": user_options, "options_warning": options_warning},
     )
 
 
