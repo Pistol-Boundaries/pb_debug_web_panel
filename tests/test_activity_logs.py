@@ -251,9 +251,9 @@ def test_map_multi_user_dropdown(client, monkeypatch):
     assert fetch.call_args.kwargs['user_ids'] == ['a', 'b']
     assert fetch.call_args.kwargs['start_at'] is None
     assert response.context['selected_users'] == ['a', 'b']
-    assert 'value="a" checked' in response.text
-    assert 'value="b" checked' in response.text
+    assert 'value="a" selected' in response.text
+    assert 'value="b" selected' not in response.text
     monkeypatch.setattr(routes, 'fetch_filter_options', MagicMock(side_effect=RuntimeError('offline')))
     response = client.get('/map?user_id=older-user')
-    assert 'value="older-user" checked' in response.text
+    assert 'value="older-user" selected' in response.text
     assert 'Could not load all user choices' in response.text

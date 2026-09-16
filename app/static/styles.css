@@ -394,9 +394,3 @@ tbody tr:nth-child(even) {
     gap: 0.625rem;
   }
 }
-
-.user-dropdown { position: relative; font: inherit; }
-.user-dropdown summary { padding: 0.8rem 0.9rem; border: 1px solid var(--line-strong); border-radius: 12px; background: white; cursor: pointer; }
-.user-options { position: absolute; z-index: 10; top: 100%; left: 0; right: 0; margin-top: 0.4rem; padding: 1rem; background: white; border: 1px solid var(--line-strong); border-radius: 12px; max-height: 300px; overflow: auto; box-shadow: 0 8px 24px #0002; }
-.user-options label { display: flex; gap: 0.5rem; align-items: center; padding: 0.5rem 0; overflow-wrap: anywhere; }
-.user-options input { width: auto; flex: 0 0 auto; }

@@ -28,16 +28,13 @@
 
     <form method="get" action="/map" class="filters" id="map-filters">
       <div class="filter-field">
-        <label id="users-label">Users</label>
-        <details class="user-dropdown">
-          <summary aria-labelledby="users-label">{{ selected_users | length ~ ' selected' if selected_users else 'All users' }}</summary>
-          <div class="user-options">
-            <small>Leave all unchecked for all users.</small>
-            {% for user in user_options %}
-              <label><input type="checkbox" name="user_id" value="{{ user }}" {% if user in selected_users %}checked{% endif %} /> {{ user }}</label>
-            {% endfor %}
-          </div>
-        </details>
+        <label for="user_id">User</label>
+        <select id="user_id" name="user_id">
+          <option value="">All users</option>
+          {% for user in user_options %}
+            <option value="{{ user }}" {% if user == selected_users | first %}selected{% endif %}>{{ user }}</option>
+          {% endfor %}
+        </select>
       </div>
       <div class="filter-field">
         <label for="start_time">Start time (local, inclusive)</label>

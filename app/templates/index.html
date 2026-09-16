@@ -27,16 +27,13 @@
         <input id="end_date" name="end_date" type="date" value="{{ filters.end_date }}" />
       </div>
       <div class="filter-field filter-field-wide">
-        <label id="users-label">Users</label>
-        <details class="user-dropdown">
-          <summary aria-labelledby="users-label">{{ selected_users | length ~ ' selected' if selected_users else 'All users' }}</summary>
-          <div class="user-options">
-            <small>Leave all unchecked for all users.</small>
-            {% for user in user_options %}
-              <label><input type="checkbox" name="users" value="{{ user }}" {% if user in selected_users %}checked{% endif %} /> {{ user }}</label>
-            {% endfor %}
-          </div>
-        </details>
+        <label for="users">User</label>
+        <select id="users" name="users">
+          <option value="">All users</option>
+          {% for user in user_options %}
+            <option value="{{ user }}" {% if user == selected_users | first %}selected{% endif %}>{{ user }}</option>
+          {% endfor %}
+        </select>
       </div>
       <div class="filter-field">
         <label for="log_type">Log Type</label>
