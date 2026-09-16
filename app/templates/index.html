@@ -27,18 +27,25 @@
         <input id="end_date" name="end_date" type="date" value="{{ filters.end_date }}" />
       </div>
       <div class="filter-field filter-field-wide">
-        <label for="users">Users</label>
-        <input
-          id="users"
-          name="users"
-          type="text"
-          value="{{ filters.users }}"
-          placeholder="One user or comma-separated users"
-        />
+        <label id="users-label">Users</label>
+        <details class="user-dropdown">
+          <summary aria-labelledby="users-label">{{ selected_users | length ~ ' selected' if selected_users else 'All users' }}</summary>
+          <div class="user-options">
+            <small>Leave all unchecked for all users.</small>
+            {% for user in user_options %}
+              <label><input type="checkbox" name="users" value="{{ user }}" {% if user in selected_users %}checked{% endif %} /> {{ user }}</label>
+            {% endfor %}
+          </div>
+        </details>
       </div>
       <div class="filter-field">
         <label for="log_type">Log Type</label>
-        <input id="log_type" name="log_type" type="text" value="{{ filters.log_type }}" placeholder="Exact event type (optional)" />
+        <select id="log_type" name="log_type">
+          <option value="">All log types</option>
+          {% for value in type_options %}
+            <option value="{{ value }}" {% if value == filters.log_type %}selected{% endif %}>{{ value }}</option>
+          {% endfor %}
+        </select>
       </div>
       <div class="filter-field">
         <label for="platform">Platform</label>
@@ -66,6 +73,7 @@
       </div>
     </form>
 
+    {% if options_warning %}<p class="empty-state">{{ options_warning }}</p>{% endif %}
     {% if error_message %}
       <div class="alert alert-error">
         <strong>Unable to load logs.</strong>

@@ -8,6 +8,7 @@ def test_firebase_session_and_private_pages(monkeypatch):
     get_settings.cache_clear()
     from app.main import app
     from app import routes
+    monkeypatch.setattr(routes, 'fetch_filter_options', lambda: {'user_id': ['a', 'b'], 'type': ['location_reading']})
     monkeypatch.setattr(routes, 'fetch_recent_logs', lambda **kwargs: [])
     with TestClient(app) as client:
         assert client.get('/').status_code == 401

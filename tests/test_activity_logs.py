@@ -45,6 +45,7 @@ def test_query_uses_activity_schema(monkeypatch):
 
 def test_empty_and_new_event_filter(client, monkeypatch):
     fetch = MagicMock(return_value=[])
+    monkeypatch.setattr(routes, 'fetch_filter_options', lambda: {'user_id': ['a', 'b'], 'type': ['location_reading']})
     monkeypatch.setattr(routes, 'fetch_recent_logs', fetch)
     response = client.get('/?start_date=2026-09-11&end_date=2026-09-11&log_type=new_event&users=a,b')
     assert response.status_code == 200
@@ -56,6 +57,7 @@ def test_empty_and_new_event_filter(client, monkeypatch):
 @pytest.mark.parametrize('coordinates', [(0, 0), (None, None)])
 def test_records_and_payload_are_rendered_safely(client, monkeypatch, coordinates):
     row = dict(id=1, user_id='example-user', occurred_at='2026-09-11T12:00:00Z', received_at='2026-09-11T12:01:00Z', type='new_event', label='<script>alert(1)</script>', note=None, lat=coordinates[0], lng=coordinates[1], accuracy_m=0, speed_ms=0, motion_state=None, session_id=None, platform='ios', app_version=None, config_version=None, client_event_id=None, payload={'nested': {'enabled': False, 'text': '<script>'}})
+    monkeypatch.setattr(routes, 'fetch_filter_options', lambda: {'user_id': ['a', 'b'], 'type': ['location_reading']})
     monkeypatch.setattr(routes, 'fetch_recent_logs', lambda **kwargs: [row])
     html = client.get('/').text
     assert 'example-user' in html and 'new_event' in html
@@ -69,6 +71,7 @@ def test_records_and_payload_are_rendered_safely(client, monkeypatch, coordinate
 
 def test_invalid_dates_and_read_error(client, monkeypatch):
     fetch = MagicMock(side_effect=RuntimeError('Read unavailable'))
+    monkeypatch.setattr(routes, 'fetch_filter_options', lambda: {'user_id': ['a', 'b'], 'type': ['location_reading']})
     monkeypatch.setattr(routes, 'fetch_recent_logs', fetch)
     assert 'Start date must be' in client.get('/?start_date=2026-09-12&end_date=2026-09-11').text
     fetch.assert_not_called()
@@ -80,6 +83,7 @@ def test_map_locations_empty_and_error(client, monkeypatch):
         dict(lat=1, lng=2, occurred_at="later", user_id="u", session_id="s"),
         dict(lat=0, lng=0, occurred_at="earlier", user_id="u", session_id="s"),
     ], []])
+    monkeypatch.setattr(routes, 'fetch_filter_options', lambda: {'user_id': ['a', 'b'], 'type': ['location_reading']})
     monkeypatch.setattr(routes, 'fetch_recent_logs', fetch)
     response = client.get('/map')
     assert response.status_code == 200
@@ -104,6 +108,7 @@ def test_map_locations_empty_and_error(client, monkeypatch):
 
 def test_map_filters(client, monkeypatch):
     fetch = MagicMock(return_value=[])
+    monkeypatch.setattr(routes, 'fetch_filter_options', lambda: {'user_id': ['a', 'b'], 'type': ['location_reading']})
     monkeypatch.setattr(routes, 'fetch_recent_logs', fetch)
     response = client.get('/map', params={'user_id': ' walker ', 'start_time': '2026-09-11T14:43:00', 'end_time': '2026-09-11T14:57:00'})
     fetch.assert_called_once_with(limit=500, offset=0, locations_only=True, user_ids=['walker'], start_at='2026-09-11T14:43:00+00:00', end_before='2026-09-11T14:57:00+00:00')
@@ -118,6 +123,7 @@ def test_map_filters(client, monkeypatch):
 ])
 def test_map_invalid_filters(client, monkeypatch, params):
     fetch = MagicMock()
+    monkeypatch.setattr(routes, 'fetch_filter_options', lambda: {'user_id': ['a', 'b'], 'type': ['location_reading']})
     monkeypatch.setattr(routes, 'fetch_recent_logs', fetch)
     response = client.get('/map', params=params)
     assert 'Unable to load locations' in response.text
@@ -127,6 +133,7 @@ def test_map_invalid_filters(client, monkeypatch, params):
 @pytest.mark.parametrize('field, expected', [('start_time', 'start_at'), ('end_time', 'end_before')])
 def test_map_one_sided_time_filter(client, monkeypatch, field, expected):
     fetch = MagicMock(return_value=[])
+    monkeypatch.setattr(routes, 'fetch_filter_options', lambda: {'user_id': ['a', 'b'], 'type': ['location_reading']})
     monkeypatch.setattr(routes, 'fetch_recent_logs', fetch)
     client.get('/map', params={field: '2026-09-11T14:00'})
     assert fetch.call_args.kwargs[expected] == '2026-09-11T14:00:00+00:00'
@@ -135,6 +142,7 @@ def test_map_one_sided_time_filter(client, monkeypatch, field, expected):
 def test_log_pages_preserve_filters(client, monkeypatch):
     row = dict(id=1, occurred_at=None, received_at=None, payload=None)
     fetch = MagicMock(return_value=[row] * 101)
+    monkeypatch.setattr(routes, 'fetch_filter_options', lambda: {'user_id': ['a', 'b'], 'type': ['location_reading']})
     monkeypatch.setattr(routes, 'fetch_recent_logs', fetch)
     response = client.get('/', params={'page': 2, 'users': 'a,b', 'log_type': 'location_reading'})
     assert len(response.context['logs']) == 100
@@ -156,6 +164,7 @@ def test_log_pages_preserve_filters(client, monkeypatch):
 @pytest.mark.parametrize('page', ['0', '-1', 'oops'])
 def test_invalid_log_page(client, monkeypatch, page):
     fetch = MagicMock()
+    monkeypatch.setattr(routes, 'fetch_filter_options', lambda: {'user_id': ['a', 'b'], 'type': ['location_reading']})
     monkeypatch.setattr(routes, 'fetch_recent_logs', fetch)
     assert 'Page must be a positive whole number' in client.get('/', params={'page': page}).text
     fetch.assert_not_called()
@@ -167,6 +176,7 @@ def test_invalid_log_page(client, monkeypatch, page):
 ])
 def test_map_local_time_offsets(client, monkeypatch, start, end, expected_start, expected_end):
     fetch = MagicMock(return_value=[])
+    monkeypatch.setattr(routes, 'fetch_filter_options', lambda: {'user_id': ['a', 'b'], 'type': ['location_reading']})
     monkeypatch.setattr(routes, 'fetch_recent_logs', fetch)
     response = client.get('/map', params={'start_time': start, 'end_time': end})
     assert fetch.call_args.kwargs['start_at'] == expected_start
@@ -176,6 +186,7 @@ def test_map_local_time_offsets(client, monkeypatch, start, end, expected_start,
 
 def test_map_explicit_empty_times_remain_unrestricted(client, monkeypatch):
     fetch = MagicMock(return_value=[])
+    monkeypatch.setattr(routes, 'fetch_filter_options', lambda: {'user_id': ['a', 'b'], 'type': ['location_reading']})
     monkeypatch.setattr(routes, 'fetch_recent_logs', fetch)
     response = client.get('/map?start_time=&end_time=')
     assert fetch.call_args.kwargs['start_at'] is None
@@ -186,6 +197,7 @@ def test_map_explicit_empty_times_remain_unrestricted(client, monkeypatch):
 def test_map_fetches_multiple_batches_and_caps(client, monkeypatch):
     row = dict(lat=0, lng=0, occurred_at='2026-09-15T12:00:00Z', user_id='u', session_id='s')
     fetch = MagicMock(side_effect=[[row] * 500, [row] * 100, []])
+    monkeypatch.setattr(routes, 'fetch_filter_options', lambda: {'user_id': ['a', 'b'], 'type': ['location_reading']})
     monkeypatch.setattr(routes, 'fetch_recent_logs', fetch)
     response = client.get('/map')
     assert len(response.context['points']) == 600
@@ -196,3 +208,36 @@ def test_map_fetches_multiple_batches_and_caps(client, monkeypatch):
     assert len(response.context['points']) == 5000
     assert fetch.call_count == 10
     assert 'Narrow the time range' in response.text
+
+
+def test_dropdown_multiple_users_and_pagination(client, monkeypatch):
+    monkeypatch.setattr(routes, 'fetch_filter_options', lambda: {'user_id': ['a', 'b'], 'type': ['location_reading']})
+    fetch = MagicMock(return_value=[])
+    monkeypatch.setattr(routes, 'fetch_recent_logs', fetch)
+    response = client.get('/?users=a&users=b&page=2&log_type=custom')
+    assert fetch.call_args.kwargs['user_ids'] == ['a', 'b']
+    assert response.context['selected_users'] == ['a', 'b']
+    assert 'users=a%2Cb' in response.context['newer_url']
+    assert '<select id="log_type"' in response.text
+    assert 'value="custom" selected' in response.text
+
+
+def test_filter_options_batches_and_cache(monkeypatch):
+    monkeypatch.setattr(supabase_client, '_filter_options_cache', None)
+    monkeypatch.setattr(supabase_client, 'get_settings', lambda: SimpleNamespace(supabase_url='test', supabase_logs_table='activity_logs', supabase_key='test'))
+    query = MagicMock()
+    for method in ('select', 'order', 'limit', 'gt'):
+        getattr(query, method).return_value = query
+    query.execute.side_effect = [
+        SimpleNamespace(data=[{'user_id': 'a'}, {'user_id': 'a'}]),
+        SimpleNamespace(data=[{'user_id': 'b'}]), SimpleNamespace(data=[]),
+        SimpleNamespace(data=[{'type': 'location_reading'}]), SimpleNamespace(data=[]),
+    ]
+    db = MagicMock()
+    db.table.return_value = query
+    monkeypatch.setattr(supabase_client, 'get_supabase_client', lambda: db)
+    expected = {'user_id': ['a', 'b'], 'type': ['location_reading']}
+    assert supabase_client.fetch_filter_options() == expected
+    query.gt.assert_any_call('user_id', 'a')
+    assert supabase_client.fetch_filter_options() == expected
+    assert query.execute.call_count == 5

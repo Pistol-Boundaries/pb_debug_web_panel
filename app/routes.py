@@ -8,7 +8,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from app.config import get_settings
-from app.supabase_client import fetch_recent_logs
+from app.supabase_client import fetch_recent_logs, fetch_filter_options
 
 
 router = APIRouter()
@@ -81,7 +81,7 @@ async def index(request: Request) -> HTMLResponse:
     error_message: str | None = None
     start_date = request.query_params.get("start_date", "").strip()
     end_date = request.query_params.get("end_date", "").strip()
-    users = request.query_params.get("users", "").strip()
+    users = ",".join(request.query_params.getlist("users")).strip()
     log_type = request.query_params.get("log_type", "").strip()
     platform = request.query_params.get("platform", "").strip().lower()
 
@@ -131,8 +131,19 @@ async def index(request: Request) -> HTMLResponse:
     except Exception as exc:
         error_message = str(exc)
 
+    selected_users = _parse_users(users)
+    options_warning = None
+    try:
+        options = fetch_filter_options()
+    except Exception:
+        options = {"user_id": [], "type": []}
+        options_warning = "Could not load all filter choices. Showing values from this page and current selections."
+    user_options = sorted(set(options["user_id"]) | set(selected_users) | {log["user_id"] for log in logs if log.get("user_id") not in (None, "-")})
+    type_options = sorted(set(options["type"]) | ({log_type} if log_type else set()) | {log["type"] for log in logs if log.get("type") not in (None, "-")})
+
     def page_url(number: int) -> str:
         params = dict(request.query_params)
+        params["users"] = users
         params["page"] = str(number)
         return "/?" + urlencode(params)
 
@@ -142,6 +153,10 @@ async def index(request: Request) -> HTMLResponse:
         {
             "request": request,
             "logs": logs,
+            "user_options": user_options,
+            "type_options": type_options,
+            "selected_users": selected_users,
+            "options_warning": options_warning,
             "page": page,
             "newer_url": page_url(page - 1) if page > 1 else None,
             "older_url": page_url(page + 1) if has_older else None,

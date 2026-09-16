@@ -54,3 +54,41 @@ def fetch_recent_logs(
     response = query.execute()
 
     return response.data or []
+
+
+_filter_options_cache: tuple[float, tuple[str, str, str], dict[str, list[str]]] | None = None
+
+
+def fetch_filter_options() -> dict[str, list[str]]:
+    """Read indexed columns only, skipping already-seen values between batches."""
+    from time import monotonic
+    global _filter_options_cache
+    settings = get_settings()
+    cache_key = (settings.supabase_url, settings.supabase_logs_table, settings.supabase_key)
+    if _filter_options_cache:
+        expires, key, options = _filter_options_cache
+        if key == cache_key and monotonic() < expires:
+            return options
+    client = get_supabase_client()
+    options = {}
+    for column in ("user_id", "type"):
+        values = set()
+        last_value = None
+        while True:
+            query = client.table(settings.supabase_logs_table).select(column).order(column).limit(1000)
+            if last_value is not None:
+                query = query.gt(column, last_value)
+            rows = query.execute().data or []
+            if not rows:
+                break
+            batch = [row[column] for row in rows if isinstance(row.get(column), str)]
+            if not batch:
+                break
+            values.update(value for value in batch if value.strip())
+            next_value = batch[-1]
+            if next_value == last_value:
+                break
+            last_value = next_value
+        options[column] = sorted(values)
+    _filter_options_cache = (monotonic() + 300, cache_key, options)
+    return options
