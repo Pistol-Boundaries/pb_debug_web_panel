@@ -7,12 +7,6 @@
     <header class="panel-header">
       <div>
         <h1>Alert Scoreboard</h1>
-        <p>
-          PB-549: raw breakdown, not a verdict. True/false positive/negative
-          classification is Scott's call and isn't computed here yet -- this
-          is the data for that conversation. The one rule already fixed:
-          mute and recent-alert suppressions are never counted as misses.
-        </p>
       </div>
       <div class="panel-actions">
         <a href="/" class="secondary-button secondary-link">Back to logs</a>
@@ -26,68 +20,220 @@
     {% if error_message %}
       <div class="alert alert-error"><strong>Unable to load scoreboard.</strong><span>{{ error_message }}</span></div>
     {% else %}
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>Decision</th>
-              <th>Suppressed Reason</th>
-              <th>Alert Helpful</th>
-              <th>Alert Issue</th>
-              <th>Counted as Miss</th>
-              <th>Count</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for row in breakdown %}
-              <tr>
-                <td>{{ row.decision or "-" }}</td>
-                <td>{{ row.suppressed_reason or "-" }}</td>
-                <td>{{ row.alert_helpful or "-" }}</td>
-                <td>{{ row.alert_issue or "-" }}</td>
-                <td>{{ "yes" if row.counted_as_miss else "excluded" }}</td>
-                <td>{{ row.alert_count }}</td>
-              </tr>
-            {% else %}
-              <tr><td colspan="6">No alert rows found.</td></tr>
-            {% endfor %}
-          </tbody>
-          {% if breakdown %}
-            <tfoot>
-              <tr>
-                <td colspan="5"><strong>Total (excludes mute/recent-alert suppressions)</strong></td>
-                <td><strong>{{ counted_total }}</strong></td>
-              </tr>
-              <tr>
-                <td colspan="5">Excluded (mute/recent-alert suppressions)</td>
-                <td>{{ excluded_total }}</td>
-              </tr>
-            </tfoot>
-          {% endif %}
-        </table>
+      <div class="stat-tiles">
+        <div class="stat-tile">
+          <p class="stat-tile-label">Total alerts</p>
+          <p class="stat-tile-value">{{ "{:,}".format(total_alerts) }}</p>
+        </div>
+        <div class="stat-tile">
+          <p class="stat-tile-label">Sent</p>
+          <p class="stat-tile-value">{{ "{:,}".format(sent_total) }}</p>
+        </div>
+        <div class="stat-tile">
+          <p class="stat-tile-label">Suppressed</p>
+          <p class="stat-tile-value">{{ "{:,}".format(suppressed_total) }}</p>
+        </div>
+        <div class="stat-tile">
+          <p class="stat-tile-label">Excluded (mute / recent-alert)</p>
+          <p class="stat-tile-value">{{ "{:,}".format(excluded_total) }}</p>
+        </div>
       </div>
 
-      <h2>Missed-Alert Reports</h2>
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>Alert Scope</th>
-              <th>Report Count</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for row in missed_summary %}
-              <tr>
-                <td>{{ row.alert_scope or "-" }}</td>
-                <td>{{ row.report_count }}</td>
-              </tr>
-            {% else %}
-              <tr><td colspan="2">No missed-alert reports found.</td></tr>
+      <div class="chart-section">
+        <h2>Breakdown by outcome</h2>
+        <p class="chart-note">
+          Grouped by decision, largest count first within each group.
+          Grayed-out bars are excluded from "counted as miss" by the one
+          fixed rule. Green/orange mark rows where a user gave an explicit
+          helpful yes/no -- everything else stays neutral: undefined
+          pending Scott's definitions, not a judgment call this page is
+          making.
+        </p>
+        <div class="bar-chart" id="breakdown-chart">
+          {% for group in breakdown_groups %}
+            <p class="bar-group-header">{{ group.name }}</p>
+            {% for bar in group.bars %}
+              <div class="bar-row">
+                <span class="bar-row-label{{ ' excluded' if not bar.counted_as_miss else '' }}">
+                  {% if bar.tone == 'good' %}<span class="bar-row-icon tone-good">&check;</span>{% endif %}
+                  {% if bar.tone == 'serious' %}<span class="bar-row-icon tone-serious">&times;</span>{% endif %}
+                  {{ bar.label }}
+                </span>
+                <div class="bar-track{{ ' tone-' + bar.tone if bar.tone != 'neutral' and bar.counted_as_miss else '' }}">
+                  <div
+                    class="bar-fill{{ ' excluded' if not bar.counted_as_miss else (' tone-' + bar.tone if bar.tone != 'neutral' else '') }}"
+                    style="width: {{ bar.pct }}%"
+                    tabindex="0"
+                    data-label="{{ bar.label }}"
+                    data-count="{{ '{:,}'.format(bar.count) }}"
+                    data-status="{{ 'Excluded from miss count' if not bar.counted_as_miss else 'Awaiting classification' }}"
+                  ></div>
+                </div>
+                <span class="bar-value{{ ' excluded' if not bar.counted_as_miss else '' }}">{{ "{:,}".format(bar.count) }}</span>
+              </div>
             {% endfor %}
-          </tbody>
-        </table>
+          {% else %}
+            <p class="empty-state">No alert rows found.</p>
+          {% endfor %}
+        </div>
       </div>
+
+      <div class="chart-section">
+        <h2>Missed-alert reports by scope</h2>
+        <p class="chart-note">
+          User-reported "I should have gotten an alert here" -- an
+          unambiguous miss by construction, so it's the one chart on this
+          page shown in a single negative tone throughout.
+        </p>
+        <div class="bar-chart" id="missed-chart">
+          {% for bar in missed_bars %}
+            <div class="bar-row">
+              <span class="bar-row-label">{{ bar.label }}</span>
+              <div class="bar-track tone-critical">
+                <div
+                  class="bar-fill tone-critical"
+                  style="width: {{ bar.pct }}%"
+                  tabindex="0"
+                  data-label="{{ bar.label }}"
+                  data-count="{{ '{:,}'.format(bar.count) }}"
+                  data-status="Missed-alert report"
+                ></div>
+              </div>
+              <span class="bar-value">{{ "{:,}".format(bar.count) }}</span>
+            </div>
+          {% else %}
+            <p class="empty-state">No missed-alert reports found.</p>
+          {% endfor %}
+        </div>
+      </div>
+
+      <details class="raw-data-toggle">
+        <summary>View raw data table</summary>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Decision</th>
+                <th>Suppressed Reason</th>
+                <th>Alert Helpful</th>
+                <th>Alert Issue</th>
+                <th>Counted as Miss</th>
+                <th>Count</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in breakdown %}
+                <tr>
+                  <td>{{ row.decision or "-" }}</td>
+                  <td>{{ row.suppressed_reason or "-" }}</td>
+                  <td>{{ row.alert_helpful or "-" }}</td>
+                  <td>{{ row.alert_issue or "-" }}</td>
+                  <td>{{ "yes" if row.counted_as_miss else "excluded" }}</td>
+                  <td>{{ row.alert_count }}</td>
+                </tr>
+              {% else %}
+                <tr><td colspan="6">No alert rows found.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </details>
     {% endif %}
   </section>
+
+  <div class="bar-tooltip" id="bar-tooltip" role="tooltip" hidden></div>
+{% endblock %}
+
+{% block extra_scripts %}
+  <script>
+    (() => {
+      const tooltip = document.getElementById("bar-tooltip");
+      if (!tooltip) return;
+
+      function showTooltip(target) {
+        const label = target.dataset.label || "";
+        const count = target.dataset.count || "";
+        const status = target.dataset.status || "";
+        tooltip.textContent = "";
+        const strong = document.createElement("strong");
+        strong.textContent = count;
+        tooltip.appendChild(strong);
+        tooltip.appendChild(document.createElement("br"));
+        tooltip.appendChild(document.createTextNode(label));
+        tooltip.appendChild(document.createElement("br"));
+        const statusEl = document.createElement("span");
+        statusEl.style.opacity = "0.75";
+        statusEl.textContent = status;
+        tooltip.appendChild(statusEl);
+        tooltip.hidden = false;
+      }
+
+      function positionTooltip(event) {
+        const padding = 14;
+        let x = event.clientX + padding;
+        let y = event.clientY + padding;
+        const rect = tooltip.getBoundingClientRect();
+        if (x + rect.width > window.innerWidth) x = event.clientX - rect.width - padding;
+        if (y + rect.height > window.innerHeight) y = event.clientY - rect.height - padding;
+        tooltip.style.left = `${x}px`;
+        tooltip.style.top = `${y}px`;
+      }
+
+      function hideTooltip() {
+        tooltip.hidden = true;
+      }
+
+      document.querySelectorAll(".bar-fill[data-label]").forEach((bar) => {
+        bar.addEventListener("pointermove", (event) => {
+          showTooltip(bar);
+          positionTooltip(event);
+        });
+        bar.addEventListener("pointerenter", (event) => {
+          showTooltip(bar);
+          positionTooltip(event);
+        });
+        bar.addEventListener("pointerleave", hideTooltip);
+        bar.addEventListener("focus", () => {
+          const rect = bar.getBoundingClientRect();
+          showTooltip(bar);
+          tooltip.style.left = `${rect.right + 14}px`;
+          tooltip.style.top = `${rect.top}px`;
+        });
+        bar.addEventListener("blur", hideTooltip);
+
+        // Click a breakdown bar -> open the raw table and scroll to its row,
+        // briefly highlighting it so the summary and the detail stay linked.
+        bar.addEventListener("click", () => {
+          const details = document.querySelector(".raw-data-toggle");
+          if (!details) return;
+          details.open = true;
+          const targetLabel = bar.dataset.label;
+          const rows = details.querySelectorAll("tbody tr");
+          for (const row of rows) {
+            if (row.dataset.builtLabel === undefined) {
+              const cells = row.querySelectorAll("td");
+              if (cells.length >= 4) {
+                const decision = cells[0].textContent.trim();
+                const suppressed = cells[1].textContent.trim();
+                const helpful = cells[2].textContent.trim();
+                const issue = cells[3].textContent.trim();
+                row.dataset.builtLabel = decision === "suppressed"
+                  ? `Suppressed — ${suppressed}`
+                  : ["Sent", helpful !== "none" && helpful !== "-" ? `helpful: ${helpful}` : null, issue !== "-" ? issue : null]
+                      .filter(Boolean).join(" — ");
+              }
+            }
+            if (row.dataset.builtLabel === targetLabel) {
+              row.scrollIntoView({ behavior: "smooth", block: "center" });
+              row.style.transition = "background-color 0.2s";
+              const original = row.style.backgroundColor;
+              row.style.backgroundColor = "var(--accent-wash)";
+              setTimeout(() => { row.style.backgroundColor = original; }, 1500);
+              break;
+            }
+          }
+        });
+      });
+    })();
+  </script>
 {% endblock %}

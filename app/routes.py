@@ -260,6 +260,35 @@ async def map_view(request: Request) -> HTMLResponse:
     )
 
 
+def _breakdown_tone(row: dict[str, Any]) -> str:
+    """Color the ONE signal that's already an explicit user judgment --
+    alert_helpful yes/no -- and nothing else. Suppressed rows and
+    unrated "sent" rows stay neutral: whether those are actually good
+    or bad is exactly the undefined question pending Scott's
+    definitions, so this must not quietly pre-judge them via color."""
+    if row.get("alert_helpful") == "yes":
+        return "good"
+    if row.get("alert_helpful") == "no":
+        return "serious"
+    return "neutral"
+
+
+def _breakdown_label(row: dict[str, Any]) -> str:
+    """Human-readable category name for one breakdown row, combining the
+    dimensions that actually vary (decision/suppressed_reason when
+    suppressed, alert_helpful/alert_issue when sent) into one bar label."""
+    if row.get("decision") == "suppressed":
+        return f"Suppressed — {row.get('suppressed_reason') or 'unknown'}"
+    parts = ["Sent"]
+    helpful = row.get("alert_helpful")
+    if helpful and helpful != "none":
+        parts.append(f"helpful: {helpful}")
+    issue = row.get("alert_issue")
+    if issue:
+        parts.append(issue)
+    return " — ".join(parts)
+
+
 @router.get("/scoreboard", response_class=HTMLResponse)
 async def scoreboard(request: Request) -> HTMLResponse:
     if not _is_authenticated(request):
@@ -274,8 +303,59 @@ async def scoreboard(request: Request) -> HTMLResponse:
     except Exception as exc:
         error_message = str(exc)
 
+    total_alerts = sum(row["alert_count"] for row in breakdown)
+    sent_total = sum(row["alert_count"] for row in breakdown if row.get("decision") == "sent")
+    suppressed_total = sum(row["alert_count"] for row in breakdown if row.get("decision") == "suppressed")
     counted_total = sum(row["alert_count"] for row in breakdown if row.get("counted_as_miss"))
     excluded_total = sum(row["alert_count"] for row in breakdown if not row.get("counted_as_miss"))
+
+    # Grouped by decision (Suppressed, then Sent) rather than a flat count
+    # sort: a pure magnitude sort interleaves "why was it suppressed"
+    # reasons with "was it helpful once sent" outcomes, which is exactly
+    # the two comparisons the Scott conversation needs to make within
+    # each group, not just against the whole list. Sorted by count within
+    # each group so magnitude is still visible where it matters.
+    max_count = max((row["alert_count"] for row in breakdown), default=0)
+
+    def _bar(row: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "label": _breakdown_label(row),
+            "count": row["alert_count"],
+            "counted_as_miss": bool(row.get("counted_as_miss")),
+            "tone": _breakdown_tone(row),
+            "pct": round(row["alert_count"] / max_count * 100, 1) if max_count else 0,
+        }
+
+    breakdown_groups = [
+        {
+            "name": name,
+            "bars": [
+                _bar(row)
+                for row in sorted(
+                    (r for r in breakdown if r.get("decision") == decision),
+                    key=lambda r: r["alert_count"],
+                    reverse=True,
+                )
+            ],
+        }
+        for decision, name in (("suppressed", "Suppressed"), ("sent", "Sent"))
+    ]
+    breakdown_groups = [g for g in breakdown_groups if g["bars"]]
+
+    max_missed = max((row["report_count"] for row in missed_summary), default=0)
+    missed_bars = [
+        {
+            "label": row.get("alert_scope") or "unknown",
+            "count": row["report_count"],
+            # Unlike the breakdown chart, every row here is an unambiguous
+            # negative signal by construction (a user reported a real
+            # miss) -- not a new classification, just naming what this
+            # table already is.
+            "tone": "critical",
+            "pct": round(row["report_count"] / max_missed * 100, 1) if max_missed else 0,
+        }
+        for row in sorted(missed_summary, key=lambda r: r["report_count"], reverse=True)
+    ]
 
     return templates.TemplateResponse(
         request,
@@ -283,7 +363,11 @@ async def scoreboard(request: Request) -> HTMLResponse:
         {
             "request": request,
             "breakdown": breakdown,
-            "missed_summary": missed_summary,
+            "breakdown_groups": breakdown_groups,
+            "missed_bars": missed_bars,
+            "total_alerts": total_alerts,
+            "sent_total": sent_total,
+            "suppressed_total": suppressed_total,
             "counted_total": counted_total,
             "excluded_total": excluded_total,
             "error_message": error_message,

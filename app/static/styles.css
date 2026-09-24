@@ -8,6 +8,23 @@
   --muted: #6f6558;
   --error-bg: #f9e3df;
   --error-text: #7d2418;
+  /* Data-viz accent: this app had no chart color before the scoreboard
+     page. One hue, sequential (magnitude), warmed to sit with the
+     existing cream/serif palette rather than a cold blue. */
+  --accent: #b3652a;
+  --accent-wash: rgba(179, 101, 42, 0.12);
+  --accent-ink: #7a4419;
+  /* Status palette (validated, fixed -- never themed): the ONLY colors
+     used to carry a positive/negative judgment, and only where the data
+     itself already carries that judgment (a user's own helpful yes/no,
+     or a reported miss) -- never applied to the undefined categories
+     this page deliberately leaves neutral. */
+  --status-good: #0ca30c;
+  --status-good-wash: rgba(12, 163, 12, 0.12);
+  --status-serious: #ec835a;
+  --status-serious-wash: rgba(236, 131, 90, 0.16);
+  --status-critical: #d03b3b;
+  --status-critical-wash: rgba(208, 59, 59, 0.12);
 }
 
 * {
@@ -360,6 +377,230 @@ tbody tr:nth-child(even) {
   th,
   td {
     padding: 0.75rem;
+  }
+}
+
+.stat-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 1px;
+  background: var(--line);
+  border-bottom: 1px solid var(--line);
+}
+
+.stat-tile {
+  background: var(--panel-bg);
+  padding: 1.25rem 1.5rem;
+}
+
+.stat-tile-label {
+  margin: 0;
+  font-size: 0.82rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+
+.stat-tile-value {
+  margin: 0.35rem 0 0;
+  font-size: 1.9rem;
+  font-weight: 600;
+  font-variant-numeric: proportional-nums;
+}
+
+.chart-section {
+  padding: 1.5rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.chart-section h2 {
+  margin: 0 0 0.25rem;
+  font-size: 1.15rem;
+}
+
+.chart-section .chart-note {
+  margin: 0 0 1.25rem;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.bar-chart {
+  display: grid;
+  gap: 0;
+  border-top: 1px solid var(--line);
+}
+
+.bar-row {
+  display: grid;
+  grid-template-columns: minmax(140px, 260px) 1fr auto;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.55rem 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.bar-row:nth-child(even) {
+  background: rgba(217, 210, 198, 0.18);
+}
+
+.bar-row-label {
+  font-size: 0.9rem;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.bar-row-label.excluded {
+  color: var(--muted);
+}
+
+.bar-track {
+  position: relative;
+  height: 18px;
+  background: var(--accent-wash);
+  border-radius: 4px;
+}
+
+.bar-fill {
+  position: relative;
+  height: 100%;
+  min-width: 3px;
+  border-radius: 4px;
+  background: var(--accent);
+  cursor: default;
+}
+
+.bar-fill.excluded {
+  background: var(--line-strong);
+}
+
+.bar-track.tone-good {
+  background: var(--status-good-wash);
+}
+.bar-fill.tone-good {
+  background: var(--status-good);
+}
+
+.bar-track.tone-serious {
+  background: var(--status-serious-wash);
+}
+.bar-fill.tone-serious {
+  background: var(--status-serious);
+}
+
+.bar-track.tone-critical {
+  background: var(--status-critical-wash);
+}
+.bar-fill.tone-critical {
+  background: var(--status-critical);
+}
+
+.bar-fill:hover,
+.bar-fill:focus-visible {
+  outline: 2px solid var(--accent-ink);
+  outline-offset: 1px;
+}
+
+/* Icon + label pairing for tone rows -- color never carries the
+   judgment alone. A plain glyph, not an icon font/SVG dependency. */
+.bar-row-icon {
+  display: inline-block;
+  width: 1em;
+  text-align: center;
+  font-weight: 700;
+}
+.bar-row-icon.tone-good {
+  color: var(--status-good);
+}
+.bar-row-icon.tone-serious {
+  color: var(--status-serious);
+}
+.bar-row-icon.tone-critical {
+  color: var(--status-critical);
+}
+
+.bar-group-header {
+  margin: 0;
+  padding: 0.6rem 0 0.35rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+
+.bar-group-header:first-child {
+  padding-top: 0;
+}
+
+/* Fixed-position value column -- deliberately NOT anchored to each bar's
+   own tip. With counts spanning 1 to 3,800+ on one linear scale, a
+   trailing label lands at a different X per row and never lines up;
+   a fixed right-aligned column reads as cleanly as a table's last
+   column regardless of bar length. */
+.bar-value {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  min-width: 4.5ch;
+}
+
+.bar-value.excluded {
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.bar-tooltip {
+  position: fixed;
+  z-index: 20;
+  background: var(--text);
+  color: #fffdf9;
+  padding: 0.5rem 0.75rem;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  pointer-events: none;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+  max-width: 260px;
+}
+
+.bar-tooltip[hidden] {
+  display: none;
+}
+
+.raw-data-toggle {
+  padding: 1.25rem 1.5rem;
+}
+
+.raw-data-toggle summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.raw-data-toggle .table-wrap {
+  margin-top: 1rem;
+}
+
+@media (max-width: 720px) {
+  .bar-row {
+    grid-template-columns: 1fr auto;
+    grid-template-areas:
+      "label label"
+      "track value";
+    row-gap: 0.3rem;
+  }
+
+  .bar-row-label {
+    grid-area: label;
+  }
+
+  .bar-track {
+    grid-area: track;
+  }
+
+  .bar-value {
+    grid-area: value;
   }
 }
 
