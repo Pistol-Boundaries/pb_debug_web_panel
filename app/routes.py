@@ -8,7 +8,12 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from app.config import get_settings
-from app.supabase_client import fetch_recent_logs, fetch_filter_options
+from app.supabase_client import (
+    fetch_recent_logs,
+    fetch_filter_options,
+    fetch_scoreboard_alert_breakdown,
+    fetch_scoreboard_missed_alert_summary,
+)
 
 
 router = APIRouter()
@@ -252,6 +257,37 @@ async def map_view(request: Request) -> HTMLResponse:
         "map.html",
         {"request": request, "points": points, "error_message": error_message, "filters": filters,
          "selected_users": selected_users, "user_options": user_options, "options_warning": options_warning},
+    )
+
+
+@router.get("/scoreboard", response_class=HTMLResponse)
+async def scoreboard(request: Request) -> HTMLResponse:
+    if not _is_authenticated(request):
+        return _login_response(request)
+
+    breakdown: list[dict[str, Any]] = []
+    missed_summary: list[dict[str, Any]] = []
+    error_message: str | None = None
+    try:
+        breakdown = fetch_scoreboard_alert_breakdown()
+        missed_summary = fetch_scoreboard_missed_alert_summary()
+    except Exception as exc:
+        error_message = str(exc)
+
+    counted_total = sum(row["alert_count"] for row in breakdown if row.get("counted_as_miss"))
+    excluded_total = sum(row["alert_count"] for row in breakdown if not row.get("counted_as_miss"))
+
+    return templates.TemplateResponse(
+        request,
+        "scoreboard.html",
+        {
+            "request": request,
+            "breakdown": breakdown,
+            "missed_summary": missed_summary,
+            "counted_total": counted_total,
+            "excluded_total": excluded_total,
+            "error_message": error_message,
+        },
     )
 
 

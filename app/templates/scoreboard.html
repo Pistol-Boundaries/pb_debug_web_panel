@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+
+{% block title %}Scoreboard{% endblock %}
+
+{% block content %}
+  <section class="panel">
+    <header class="panel-header">
+      <div>
+        <h1>Alert Scoreboard</h1>
+        <p>
+          PB-549: raw breakdown, not a verdict. True/false positive/negative
+          classification is Scott's call and isn't computed here yet -- this
+          is the data for that conversation. The one rule already fixed:
+          mute and recent-alert suppressions are never counted as misses.
+        </p>
+      </div>
+      <div class="panel-actions">
+        <a href="/" class="secondary-button secondary-link">Back to logs</a>
+        <a href="/map" class="secondary-button secondary-link">Recent map</a>
+        <form method="post" action="/logout">
+          <button type="submit" class="secondary-button">Log out</button>
+        </form>
+      </div>
+    </header>
+
+    {% if error_message %}
+      <div class="alert alert-error"><strong>Unable to load scoreboard.</strong><span>{{ error_message }}</span></div>
+    {% else %}
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Decision</th>
+              <th>Suppressed Reason</th>
+              <th>Alert Helpful</th>
+              <th>Alert Issue</th>
+              <th>Counted as Miss</th>
+              <th>Count</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in breakdown %}
+              <tr>
+                <td>{{ row.decision or "-" }}</td>
+                <td>{{ row.suppressed_reason or "-" }}</td>
+                <td>{{ row.alert_helpful or "-" }}</td>
+                <td>{{ row.alert_issue or "-" }}</td>
+                <td>{{ "yes" if row.counted_as_miss else "excluded" }}</td>
+                <td>{{ row.alert_count }}</td>
+              </tr>
+            {% else %}
+              <tr><td colspan="6">No alert rows found.</td></tr>
+            {% endfor %}
+          </tbody>
+          {% if breakdown %}
+            <tfoot>
+              <tr>
+                <td colspan="5"><strong>Total (excludes mute/recent-alert suppressions)</strong></td>
+                <td><strong>{{ counted_total }}</strong></td>
+              </tr>
+              <tr>
+                <td colspan="5">Excluded (mute/recent-alert suppressions)</td>
+                <td>{{ excluded_total }}</td>
+              </tr>
+            </tfoot>
+          {% endif %}
+        </table>
+      </div>
+
+      <h2>Missed-Alert Reports</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Alert Scope</th>
+              <th>Report Count</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in missed_summary %}
+              <tr>
+                <td>{{ row.alert_scope or "-" }}</td>
+                <td>{{ row.report_count }}</td>
+              </tr>
+            {% else %}
+              <tr><td colspan="2">No missed-alert reports found.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% endif %}
+  </section>
+{% endblock %}
