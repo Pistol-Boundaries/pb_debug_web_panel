@@ -294,12 +294,57 @@ async def scoreboard(request: Request) -> HTMLResponse:
     if not _is_authenticated(request):
         return _login_response(request)
 
+    start_date = request.query_params.get("start_date", "").strip()
+    end_date = request.query_params.get("end_date", "").strip()
+    version_raw = request.query_params.get("version", "").strip()
+    # Only default on a fresh visit (no params at all); an explicit uncheck
+    # means "show debug data" and must stay unchecked on reload.
+    include_debug_user = (
+        request.query_params.get("include_debug_user") == "on"
+        if request.query_params
+        else False
+    )
+
     breakdown: list[dict[str, Any]] = []
     missed_summary: list[dict[str, Any]] = []
     error_message: str | None = None
     try:
-        breakdown = fetch_scoreboard_alert_breakdown()
-        missed_summary = fetch_scoreboard_missed_alert_summary()
+        start_value = _parse_date(start_date) if start_date else None
+        end_value = _parse_date(end_date) if end_date else None
+        if start_value and end_value and start_value > end_value:
+            raise ValueError("Start date must be on or before end date.")
+        version_value: float | None = None
+        if version_raw:
+            try:
+                version_value = float(version_raw)
+            except ValueError:
+                raise ValueError("Version must be a number, e.g. 0.1.")
+
+        from_at = (
+            datetime.combine(start_value, time.min, tzinfo=timezone.utc).isoformat()
+            if start_value
+            else None
+        )
+        to_before = (
+            datetime.combine(end_value + timedelta(days=1), time.min, tzinfo=timezone.utc).isoformat()
+            if end_value
+            else None
+        )
+        exclude_debug_user = not include_debug_user
+
+        breakdown = fetch_scoreboard_alert_breakdown(
+            from_at=from_at,
+            to_before=to_before,
+            version=version_value,
+            exclude_debug_user=exclude_debug_user,
+        )
+        missed_summary = fetch_scoreboard_missed_alert_summary(
+            from_at=from_at,
+            to_before=to_before,
+            exclude_debug_user=exclude_debug_user,
+        )
+    except ValueError as exc:
+        error_message = str(exc)
     except Exception as exc:
         error_message = str(exc)
 
@@ -371,6 +416,12 @@ async def scoreboard(request: Request) -> HTMLResponse:
             "counted_total": counted_total,
             "excluded_total": excluded_total,
             "error_message": error_message,
+            "filters": {
+                "start_date": start_date,
+                "end_date": end_date,
+                "version": version_raw,
+                "include_debug_user": include_debug_user,
+            },
         },
     )
 
