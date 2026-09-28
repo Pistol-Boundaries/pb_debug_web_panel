@@ -28,7 +28,12 @@
       </div>
       <div class="filter-field">
         <label for="version">Alert service version</label>
-        <input id="version" name="version" type="text" placeholder="e.g. 0.1" value="{{ filters.version }}" />
+        <select id="version" name="version">
+          <option value="">All versions</option>
+          {% for value in version_options %}
+            <option value="{{ value }}" {% if value == filters.version %}selected{% endif %}>{{ value }}</option>
+          {% endfor %}
+        </select>
       </div>
       <div class="filter-field filter-field-checkbox">
         <label for="include_debug_user" class="checkbox-label">

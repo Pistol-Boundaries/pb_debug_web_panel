@@ -98,6 +98,14 @@ def fetch_scoreboard_missed_alert_summary(
     return response.data or []
 
 
+def fetch_scoreboard_alert_versions() -> list[str]:
+    """PB-549: distinct alert_service_version values in use, for the
+    scoreboard page's version filter dropdown."""
+    client = get_supabase_client()
+    response = client.rpc("scoreboard_alert_versions").execute()
+    return [str(row["version"]) for row in response.data or [] if row.get("version") is not None]
+
+
 _filter_options_cache: tuple[float, tuple[str, str, str], dict[str, list[str]]] | None = None
 
 

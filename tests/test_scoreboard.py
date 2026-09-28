@@ -194,3 +194,43 @@ def test_scoreboard_route_defaults_exclude_debug_user_on_fresh_visit(client, mon
 
     assert response.status_code == 200
     assert calls[0]['exclude_debug_user'] is True
+
+
+def test_scoreboard_route_renders_version_dropdown_from_db(client, monkeypatch):
+    monkeypatch.setattr(routes, 'fetch_scoreboard_alert_breakdown', lambda **kwargs: [])
+    monkeypatch.setattr(routes, 'fetch_scoreboard_missed_alert_summary', lambda **kwargs: [])
+    monkeypatch.setattr(routes, 'fetch_scoreboard_alert_versions', lambda: ['0.1', '0.2'])
+
+    response = client.get('/scoreboard', params={'version': '0.2'})
+
+    assert response.status_code == 200
+    assert '<option value="">All versions</option>' in response.text
+    assert '<option value="0.1" >0.1</option>' in response.text
+    assert '<option value="0.2" selected>0.2</option>' in response.text
+
+
+def test_scoreboard_route_keeps_stale_selected_version_in_options(client, monkeypatch):
+    # A version that's no longer in the DB (e.g. bookmarked URL) still
+    # shows as selected rather than silently resetting to "All versions".
+    monkeypatch.setattr(routes, 'fetch_scoreboard_alert_breakdown', lambda **kwargs: [])
+    monkeypatch.setattr(routes, 'fetch_scoreboard_missed_alert_summary', lambda **kwargs: [])
+    monkeypatch.setattr(routes, 'fetch_scoreboard_alert_versions', lambda: ['0.2'])
+
+    response = client.get('/scoreboard', params={'version': '0.1'})
+
+    assert response.status_code == 200
+    assert '<option value="0.1" selected>0.1</option>' in response.text
+
+
+def test_scoreboard_route_falls_back_when_versions_fetch_fails(client, monkeypatch):
+    def boom():
+        raise RuntimeError("db unreachable")
+
+    monkeypatch.setattr(routes, 'fetch_scoreboard_alert_breakdown', lambda **kwargs: [])
+    monkeypatch.setattr(routes, 'fetch_scoreboard_missed_alert_summary', lambda **kwargs: [])
+    monkeypatch.setattr(routes, 'fetch_scoreboard_alert_versions', boom)
+
+    response = client.get('/scoreboard')
+
+    assert response.status_code == 200
+    assert '<option value="">All versions</option>' in response.text

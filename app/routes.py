@@ -12,6 +12,7 @@ from app.supabase_client import (
     fetch_recent_logs,
     fetch_filter_options,
     fetch_scoreboard_alert_breakdown,
+    fetch_scoreboard_alert_versions,
     fetch_scoreboard_missed_alert_summary,
 )
 
@@ -348,6 +349,16 @@ async def scoreboard(request: Request) -> HTMLResponse:
     except Exception as exc:
         error_message = str(exc)
 
+    try:
+        version_options = fetch_scoreboard_alert_versions()
+    except Exception:
+        version_options = []
+    if version_raw and version_raw not in version_options:
+        try:
+            version_options = sorted({*version_options, version_raw}, key=float)
+        except ValueError:
+            pass  # invalid input already surfaced via error_message above
+
     total_alerts = sum(row["alert_count"] for row in breakdown)
     sent_total = sum(row["alert_count"] for row in breakdown if row.get("decision") == "sent")
     suppressed_total = sum(row["alert_count"] for row in breakdown if row.get("decision") == "suppressed")
@@ -416,6 +427,7 @@ async def scoreboard(request: Request) -> HTMLResponse:
             "counted_total": counted_total,
             "excluded_total": excluded_total,
             "error_message": error_message,
+            "version_options": version_options,
             "filters": {
                 "start_date": start_date,
                 "end_date": end_date,
