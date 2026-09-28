@@ -61,6 +61,9 @@ def fetch_scoreboard_alert_breakdown(
     to_before: str | None = None,
     version: float | None = None,
     exclude_debug_user: bool = True,
+    scope: str | None = None,
+    platform: str | None = None,
+    sdk_version: str | None = None,
 ) -> list[dict[str, Any]]:
     """PB-549: raw alerts breakdown via the scoreboard_alert_breakdown() DB
     function. TP/FP/FN classification is intentionally not computed --
@@ -74,9 +77,36 @@ def fetch_scoreboard_alert_breakdown(
             "p_to": to_before,
             "p_version": version,
             "p_exclude_debug_user": exclude_debug_user,
+            "p_scope": scope,
+            "p_platform": platform,
+            "p_sdk_version": sdk_version,
         },
     ).execute()
     return response.data or []
+
+
+def fetch_scoreboard_alert_scopes() -> list[str]:
+    """PB-549: distinct alert_scope values in use, for the scoreboard
+    page's scope filter dropdown."""
+    client = get_supabase_client()
+    response = client.rpc("scoreboard_alert_scopes").execute()
+    return [row["alert_scope"] for row in response.data or [] if row.get("alert_scope")]
+
+
+def fetch_scoreboard_alert_platforms() -> list[str]:
+    """PB-549: distinct device platforms (Android/iOS) in use, for the
+    scoreboard page's platform filter dropdown."""
+    client = get_supabase_client()
+    response = client.rpc("scoreboard_alert_platforms").execute()
+    return [row["platform"] for row in response.data or [] if row.get("platform")]
+
+
+def fetch_scoreboard_alert_sdk_versions() -> list[str]:
+    """PB-549: distinct TransistorSoft SDK versions in use, for the
+    scoreboard page's SDK-version filter dropdown."""
+    client = get_supabase_client()
+    response = client.rpc("scoreboard_alert_sdk_versions").execute()
+    return [row["sdk_version"] for row in response.data or [] if row.get("sdk_version")]
 
 
 def fetch_scoreboard_missed_alert_summary(

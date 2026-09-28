@@ -35,6 +35,33 @@
           {% endfor %}
         </select>
       </div>
+      <div class="filter-field">
+        <label for="scope">Scope</label>
+        <select id="scope" name="scope">
+          <option value="">All scopes</option>
+          {% for value in scope_options %}
+            <option value="{{ value }}" {% if value == filters.scope %}selected{% endif %}>{{ value | capitalize }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="filter-field">
+        <label for="platform">Platform</label>
+        <select id="platform" name="platform">
+          <option value="">All platforms</option>
+          {% for value in platform_options %}
+            <option value="{{ value }}" {% if value == filters.platform %}selected{% endif %}>{{ value }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="filter-field">
+        <label for="sdk_version">SDK version</label>
+        <select id="sdk_version" name="sdk_version">
+          <option value="">All SDK versions</option>
+          {% for value in sdk_version_options %}
+            <option value="{{ value }}" {% if value == filters.sdk_version %}selected{% endif %}>{{ value }}</option>
+          {% endfor %}
+        </select>
+      </div>
       <div class="filter-field filter-field-checkbox">
         <label for="include_debug_user" class="checkbox-label">
           <input id="include_debug_user" name="include_debug_user" type="checkbox" {% if filters.include_debug_user %}checked{% endif %} />

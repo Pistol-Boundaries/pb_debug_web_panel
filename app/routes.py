@@ -12,6 +12,9 @@ from app.supabase_client import (
     fetch_recent_logs,
     fetch_filter_options,
     fetch_scoreboard_alert_breakdown,
+    fetch_scoreboard_alert_platforms,
+    fetch_scoreboard_alert_scopes,
+    fetch_scoreboard_alert_sdk_versions,
     fetch_scoreboard_alert_versions,
     fetch_scoreboard_missed_alert_classification,
     fetch_scoreboard_missed_alert_summary,
@@ -299,6 +302,9 @@ async def scoreboard(request: Request) -> HTMLResponse:
     start_date = request.query_params.get("start_date", "").strip()
     end_date = request.query_params.get("end_date", "").strip()
     version_raw = request.query_params.get("version", "").strip()
+    scope_raw = request.query_params.get("scope", "").strip()
+    platform_raw = request.query_params.get("platform", "").strip()
+    sdk_version_raw = request.query_params.get("sdk_version", "").strip()
     # Only default on a fresh visit (no params at all); an explicit uncheck
     # means "show debug data" and must stay unchecked on reload.
     include_debug_user = (
@@ -340,6 +346,9 @@ async def scoreboard(request: Request) -> HTMLResponse:
             to_before=to_before,
             version=version_value,
             exclude_debug_user=exclude_debug_user,
+            scope=scope_raw or None,
+            platform=platform_raw or None,
+            sdk_version=sdk_version_raw or None,
         )
         missed_summary = fetch_scoreboard_missed_alert_summary(
             from_at=from_at,
@@ -365,6 +374,27 @@ async def scoreboard(request: Request) -> HTMLResponse:
             version_options = sorted({*version_options, version_raw}, key=float)
         except ValueError:
             pass  # invalid input already surfaced via error_message above
+
+    try:
+        scope_options = fetch_scoreboard_alert_scopes()
+    except Exception:
+        scope_options = []
+    if scope_raw and scope_raw not in scope_options:
+        scope_options = sorted({*scope_options, scope_raw})
+
+    try:
+        platform_options = fetch_scoreboard_alert_platforms()
+    except Exception:
+        platform_options = []
+    if platform_raw and platform_raw not in platform_options:
+        platform_options = sorted({*platform_options, platform_raw})
+
+    try:
+        sdk_version_options = fetch_scoreboard_alert_sdk_versions()
+    except Exception:
+        sdk_version_options = []
+    if sdk_version_raw and sdk_version_raw not in sdk_version_options:
+        sdk_version_options = sorted({*sdk_version_options, sdk_version_raw})
 
     total_alerts = sum(row["alert_count"] for row in breakdown)
     sent_total = sum(row["alert_count"] for row in breakdown if row.get("decision") == "sent")
@@ -473,10 +503,16 @@ async def scoreboard(request: Request) -> HTMLResponse:
             "excluded_total": excluded_total,
             "error_message": error_message,
             "version_options": version_options,
+            "scope_options": scope_options,
+            "platform_options": platform_options,
+            "sdk_version_options": sdk_version_options,
             "filters": {
                 "start_date": start_date,
                 "end_date": end_date,
                 "version": version_raw,
+                "scope": scope_raw,
+                "platform": platform_raw,
+                "sdk_version": sdk_version_raw,
                 "include_debug_user": include_debug_user,
             },
         },

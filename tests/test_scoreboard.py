@@ -33,7 +33,10 @@ def test_fetch_scoreboard_alert_breakdown_calls_rpc(monkeypatch):
 
     db.rpc.assert_called_once_with(
         'scoreboard_alert_breakdown',
-        {'p_from': None, 'p_to': None, 'p_version': None, 'p_exclude_debug_user': True},
+        {
+            'p_from': None, 'p_to': None, 'p_version': None, 'p_exclude_debug_user': True,
+            'p_scope': None, 'p_platform': None, 'p_sdk_version': None,
+        },
     )
     assert result == [{'decision': 'sent', 'alert_count': 5}]
 
@@ -304,3 +307,88 @@ def test_scoreboard_route_shows_empty_state_with_no_missed_classification(client
 
     assert response.status_code == 200
     assert 'Missed-alert outcomes' in response.text
+
+
+def test_fetch_scoreboard_alert_scopes_calls_rpc(monkeypatch):
+    rpc = MagicMock()
+    rpc.execute.return_value = SimpleNamespace(data=[{'alert_scope': 'location'}, {'alert_scope': 'building'}])
+    db = MagicMock()
+    db.rpc.return_value = rpc
+    monkeypatch.setattr(supabase_client, 'get_supabase_client', lambda: db)
+
+    result = supabase_client.fetch_scoreboard_alert_scopes()
+
+    db.rpc.assert_called_once_with('scoreboard_alert_scopes')
+    assert result == ['location', 'building']
+
+
+def test_fetch_scoreboard_alert_platforms_calls_rpc(monkeypatch):
+    rpc = MagicMock()
+    rpc.execute.return_value = SimpleNamespace(data=[{'platform': 'Android'}, {'platform': 'iOS'}])
+    db = MagicMock()
+    db.rpc.return_value = rpc
+    monkeypatch.setattr(supabase_client, 'get_supabase_client', lambda: db)
+
+    result = supabase_client.fetch_scoreboard_alert_platforms()
+
+    db.rpc.assert_called_once_with('scoreboard_alert_platforms')
+    assert result == ['Android', 'iOS']
+
+
+def test_fetch_scoreboard_alert_sdk_versions_calls_rpc(monkeypatch):
+    rpc = MagicMock()
+    rpc.execute.return_value = SimpleNamespace(data=[{'sdk_version': '3.18.10'}])
+    db = MagicMock()
+    db.rpc.return_value = rpc
+    monkeypatch.setattr(supabase_client, 'get_supabase_client', lambda: db)
+
+    result = supabase_client.fetch_scoreboard_alert_sdk_versions()
+
+    db.rpc.assert_called_once_with('scoreboard_alert_sdk_versions')
+    assert result == ['3.18.10']
+
+
+def test_scoreboard_route_passes_scope_platform_sdk_filters(client, monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        routes, 'fetch_scoreboard_alert_breakdown',
+        lambda **kwargs: calls.append(kwargs) or [],
+    )
+    monkeypatch.setattr(routes, 'fetch_scoreboard_missed_alert_summary', lambda **kwargs: [])
+    monkeypatch.setattr(routes, 'fetch_scoreboard_missed_alert_classification', lambda **kwargs: [])
+    monkeypatch.setattr(routes, 'fetch_scoreboard_alert_scopes', lambda: ['location', 'building'])
+    monkeypatch.setattr(routes, 'fetch_scoreboard_alert_platforms', lambda: ['Android', 'iOS'])
+    monkeypatch.setattr(routes, 'fetch_scoreboard_alert_sdk_versions', lambda: ['3.18.10'])
+
+    response = client.get(
+        '/scoreboard',
+        params={'scope': 'building', 'platform': 'iOS', 'sdk_version': '3.18.10'},
+    )
+
+    assert response.status_code == 200
+    assert calls[0]['scope'] == 'building'
+    assert calls[0]['platform'] == 'iOS'
+    assert calls[0]['sdk_version'] == '3.18.10'
+    # Form reflects the submitted filters back.
+    assert '<option value="building" selected>Building</option>' in response.text
+    assert '<option value="iOS" selected>iOS</option>' in response.text
+    assert '<option value="3.18.10" selected>3.18.10</option>' in response.text
+
+
+def test_scoreboard_route_falls_back_when_scope_platform_sdk_fetch_fails(client, monkeypatch):
+    def boom():
+        raise RuntimeError("db unreachable")
+
+    monkeypatch.setattr(routes, 'fetch_scoreboard_alert_breakdown', lambda **kwargs: [])
+    monkeypatch.setattr(routes, 'fetch_scoreboard_missed_alert_summary', lambda **kwargs: [])
+    monkeypatch.setattr(routes, 'fetch_scoreboard_missed_alert_classification', lambda **kwargs: [])
+    monkeypatch.setattr(routes, 'fetch_scoreboard_alert_scopes', boom)
+    monkeypatch.setattr(routes, 'fetch_scoreboard_alert_platforms', boom)
+    monkeypatch.setattr(routes, 'fetch_scoreboard_alert_sdk_versions', boom)
+
+    response = client.get('/scoreboard')
+
+    assert response.status_code == 200
+    assert '<option value="">All scopes</option>' in response.text
+    assert '<option value="">All platforms</option>' in response.text
+    assert '<option value="">All SDK versions</option>' in response.text
