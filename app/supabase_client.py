@@ -98,6 +98,27 @@ def fetch_scoreboard_missed_alert_summary(
     return response.data or []
 
 
+def fetch_scoreboard_missed_alert_classification(
+    from_at: str | None = None,
+    to_before: str | None = None,
+    exclude_debug_user: bool = True,
+) -> list[dict[str, Any]]:
+    """PB-549: classifies each missed-alert report per Scott's rule
+    (2026-09-28) -- suppressed_by_rule / alert_sent / no_event_received --
+    via the scoreboard_missed_alert_classification() DB function.
+    Read-only analytics; does not affect live alert decisions."""
+    client = get_supabase_client()
+    response = client.rpc(
+        "scoreboard_missed_alert_classification",
+        {
+            "p_from": from_at,
+            "p_to": to_before,
+            "p_exclude_debug_user": exclude_debug_user,
+        },
+    ).execute()
+    return response.data or []
+
+
 def fetch_scoreboard_alert_versions() -> list[str]:
     """PB-549: distinct alert_service_version values in use, for the
     scoreboard page's version filter dropdown."""

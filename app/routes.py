@@ -13,6 +13,7 @@ from app.supabase_client import (
     fetch_filter_options,
     fetch_scoreboard_alert_breakdown,
     fetch_scoreboard_alert_versions,
+    fetch_scoreboard_missed_alert_classification,
     fetch_scoreboard_missed_alert_summary,
 )
 
@@ -308,6 +309,7 @@ async def scoreboard(request: Request) -> HTMLResponse:
 
     breakdown: list[dict[str, Any]] = []
     missed_summary: list[dict[str, Any]] = []
+    missed_classification: list[dict[str, Any]] = []
     error_message: str | None = None
     try:
         start_value = _parse_date(start_date) if start_date else None
@@ -340,6 +342,11 @@ async def scoreboard(request: Request) -> HTMLResponse:
             exclude_debug_user=exclude_debug_user,
         )
         missed_summary = fetch_scoreboard_missed_alert_summary(
+            from_at=from_at,
+            to_before=to_before,
+            exclude_debug_user=exclude_debug_user,
+        )
+        missed_classification = fetch_scoreboard_missed_alert_classification(
             from_at=from_at,
             to_before=to_before,
             exclude_debug_user=exclude_debug_user,
@@ -413,6 +420,43 @@ async def scoreboard(request: Request) -> HTMLResponse:
         for row in sorted(missed_summary, key=lambda r: r["report_count"], reverse=True)
     ]
 
+    # Scott's rule (2026-09-28): a missed-alert report only confirms a
+    # real rule mistake when it's suppressed_by_rule -- alert_sent means
+    # the alert fired (a delivery/notice question, not our decision
+    # logic) and no_event_received means Radar itself never generated an
+    # event (an upstream tracking gap, not a suppression-rule bug
+    # either). Three different problems; three different tones so
+    # "missed alert" stops meaning one undifferentiated red bar.
+    _CLASSIFICATION_GROUPS = (
+        ("suppressed_by_rule", "Suppressed by Rule (confirmed miss)", "critical"),
+        ("alert_sent", "Alert Was Sent (delivery/notice issue)", "serious"),
+        ("no_event_received", "No Event Received (Radar gap)", "warning"),
+    )
+    classification_total = sum(row["report_count"] for row in missed_classification)
+    missed_classification_groups = [
+        {
+            "name": name,
+            "tone": tone,
+            "bars": [
+                {
+                    "label": (row.get("alert_scope") or "unknown").capitalize(),
+                    "count": row["report_count"],
+                    "tone": tone,
+                    "pct": round(row["report_count"] / classification_total * 100, 1)
+                    if classification_total
+                    else 0,
+                }
+                for row in sorted(
+                    (r for r in missed_classification if r.get("classification") == key),
+                    key=lambda r: r["report_count"],
+                    reverse=True,
+                )
+            ],
+        }
+        for key, name, tone in _CLASSIFICATION_GROUPS
+    ]
+    missed_classification_groups = [g for g in missed_classification_groups if g["bars"]]
+
     return templates.TemplateResponse(
         request,
         "scoreboard.html",
@@ -421,6 +465,7 @@ async def scoreboard(request: Request) -> HTMLResponse:
             "breakdown": breakdown,
             "breakdown_groups": breakdown_groups,
             "missed_bars": missed_bars,
+            "missed_classification_groups": missed_classification_groups,
             "total_alerts": total_alerts,
             "sent_total": sent_total,
             "suppressed_total": suppressed_total,
