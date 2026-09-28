@@ -56,6 +56,24 @@ def fetch_recent_logs(
     return response.data or []
 
 
+def fetch_scoreboard_alert_breakdown() -> list[dict[str, Any]]:
+    """PB-549: raw alerts breakdown via the scoreboard_alert_breakdown() DB
+    function. TP/FP/FN classification is intentionally not computed --
+    pending Scott's definitions; this surfaces counts for that conversation.
+    """
+    client = get_supabase_client()
+    response = client.rpc("scoreboard_alert_breakdown").execute()
+    return response.data or []
+
+
+def fetch_scoreboard_missed_alert_summary() -> list[dict[str, Any]]:
+    """PB-549: missed_alert_feedback counts by scope via the
+    scoreboard_missed_alert_summary() DB function."""
+    client = get_supabase_client()
+    response = client.rpc("scoreboard_missed_alert_summary").execute()
+    return response.data or []
+
+
 _filter_options_cache: tuple[float, tuple[str, str, str], dict[str, list[str]]] | None = None
 
 
