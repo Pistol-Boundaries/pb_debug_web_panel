@@ -137,6 +137,46 @@
         </div>
       </div>
 
+      <div class="chart-section">
+        <h2>Missed-alert outcomes</h2>
+        <p class="chart-note">
+          Scott's rule (2026-09-28): a suppression only counts as a
+          confirmed miss when a report matches it on user + place + time
+          (+/-30 min). Everything else here is a different problem --
+          the alert actually fired (a delivery/notice question), or
+          Radar never generated an event at all (an upstream tracking
+          gap) -- not a mistake in our suppression rules.
+        </p>
+        <div class="bar-chart" id="missed-classification-chart">
+          {% for group in missed_classification_groups %}
+            <p class="bar-group-header">{{ group.name }}</p>
+            {% for bar in group.bars %}
+              <div class="bar-row">
+                <span class="bar-row-label">
+                  {% if group.tone == 'critical' %}<span class="bar-row-icon tone-critical">!</span>{% endif %}
+                  {% if group.tone == 'serious' %}<span class="bar-row-icon tone-serious">&rarr;</span>{% endif %}
+                  {% if group.tone == 'warning' %}<span class="bar-row-icon tone-warning">?</span>{% endif %}
+                  {{ bar.label }}
+                </span>
+                <div class="bar-track tone-{{ bar.tone }}">
+                  <div
+                    class="bar-fill tone-{{ bar.tone }}"
+                    style="width: {{ bar.pct }}%"
+                    tabindex="0"
+                    data-label="{{ group.name }} -- {{ bar.label }}"
+                    data-count="{{ '{:,}'.format(bar.count) }}"
+                    data-status="{{ group.name }}"
+                  ></div>
+                </div>
+                <span class="bar-value">{{ "{:,}".format(bar.count) }}</span>
+              </div>
+            {% endfor %}
+          {% else %}
+            <p class="empty-state">No missed-alert reports found.</p>
+          {% endfor %}
+        </div>
+      </div>
+
       <details class="raw-data-toggle">
         <summary>View raw data table</summary>
         <div class="table-wrap">

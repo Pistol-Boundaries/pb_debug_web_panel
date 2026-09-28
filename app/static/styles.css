@@ -25,6 +25,8 @@
   --status-serious-wash: rgba(236, 131, 90, 0.16);
   --status-critical: #d03b3b;
   --status-critical-wash: rgba(208, 59, 59, 0.12);
+  --status-warning: #fab219;
+  --status-warning-wash: rgba(250, 178, 25, 0.16);
 }
 
 * {
@@ -524,6 +526,13 @@ tbody tr:nth-child(even) {
   background: var(--status-critical);
 }
 
+.bar-track.tone-warning {
+  background: var(--status-warning-wash);
+}
+.bar-fill.tone-warning {
+  background: var(--status-warning);
+}
+
 .bar-fill:hover,
 .bar-fill:focus-visible {
   outline: 2px solid var(--accent-ink);
@@ -546,6 +555,9 @@ tbody tr:nth-child(even) {
 }
 .bar-row-icon.tone-critical {
   color: var(--status-critical);
+}
+.bar-row-icon.tone-warning {
+  color: var(--status-warning);
 }
 
 .bar-group-header {
