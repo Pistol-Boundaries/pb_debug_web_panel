@@ -30,14 +30,16 @@
         <label for="version">Alert service version</label>
         <input id="version" name="version" type="text" placeholder="e.g. 0.1" value="{{ filters.version }}" />
       </div>
-      <div class="filter-field">
-        <label for="include_debug_user">
+      <div class="filter-field filter-field-checkbox">
+        <label for="include_debug_user" class="checkbox-label">
           <input id="include_debug_user" name="include_debug_user" type="checkbox" {% if filters.include_debug_user %}checked{% endif %} />
           Include debug/simulated user
         </label>
       </div>
-      <button type="submit">Apply filters</button>
-      <a href="/scoreboard" class="secondary-button secondary-link">Reset</a>
+      <div class="filter-actions">
+        <button type="submit">Apply filters</button>
+        <a href="/scoreboard" class="secondary-button secondary-link">Reset</a>
+      </div>
     </form>
 
     {% if error_message %}
