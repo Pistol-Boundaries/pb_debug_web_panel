@@ -234,7 +234,8 @@ async def map_view(request: Request) -> HTMLResponse:
                 "occurred_at": row.get("occurred_at"),
                 "lat": row["lat"],
                 "lng": row["lng"],
-                "label": f"{row.get('occurred_at')} · {row.get('user_id')}",
+                "platform": row.get("platform") or "unknown",
+                "label": f"{row.get('occurred_at')} · {row.get('user_id')} · {row.get('platform') or 'unknown'}",
                 "user_id": row.get("user_id"),
                 "session_id": row.get("session_id"),
             }
