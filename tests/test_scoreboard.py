@@ -31,7 +31,10 @@ def test_fetch_scoreboard_alert_breakdown_calls_rpc(monkeypatch):
 
     result = supabase_client.fetch_scoreboard_alert_breakdown()
 
-    db.rpc.assert_called_once_with('scoreboard_alert_breakdown')
+    db.rpc.assert_called_once_with(
+        'scoreboard_alert_breakdown',
+        {'p_from': None, 'p_to': None, 'p_version': None, 'p_exclude_debug_user': True},
+    )
     assert result == [{'decision': 'sent', 'alert_count': 5}]
 
 
@@ -44,7 +47,10 @@ def test_fetch_scoreboard_missed_alert_summary_calls_rpc(monkeypatch):
 
     result = supabase_client.fetch_scoreboard_missed_alert_summary()
 
-    db.rpc.assert_called_once_with('scoreboard_missed_alert_summary')
+    db.rpc.assert_called_once_with(
+        'scoreboard_missed_alert_summary',
+        {'p_from': None, 'p_to': None, 'p_exclude_debug_user': True},
+    )
     assert result == [{'alert_scope': 'location', 'report_count': 3}]
 
 
@@ -66,8 +72,8 @@ def test_scoreboard_route_renders_breakdown_and_excludes_muted_from_total(client
         {'decision': 'suppressed', 'suppressed_reason': 'muted', 'alert_helpful': 'none',
          'alert_issue': None, 'counted_as_miss': False, 'alert_count': 4},
     ]
-    monkeypatch.setattr(routes, 'fetch_scoreboard_alert_breakdown', lambda: breakdown)
-    monkeypatch.setattr(routes, 'fetch_scoreboard_missed_alert_summary', lambda: [])
+    monkeypatch.setattr(routes, 'fetch_scoreboard_alert_breakdown', lambda **kwargs: breakdown)
+    monkeypatch.setattr(routes, 'fetch_scoreboard_missed_alert_summary', lambda **kwargs: [])
 
     response = client.get('/scoreboard')
 
@@ -100,8 +106,8 @@ def test_scoreboard_route_groups_by_decision_and_applies_tone(client, monkeypatc
         {'decision': 'suppressed', 'suppressed_reason': 'motion_activity', 'alert_helpful': 'none',
          'alert_issue': None, 'counted_as_miss': True, 'alert_count': 20},
     ]
-    monkeypatch.setattr(routes, 'fetch_scoreboard_alert_breakdown', lambda: breakdown)
-    monkeypatch.setattr(routes, 'fetch_scoreboard_missed_alert_summary', lambda: [])
+    monkeypatch.setattr(routes, 'fetch_scoreboard_alert_breakdown', lambda **kwargs: breakdown)
+    monkeypatch.setattr(routes, 'fetch_scoreboard_missed_alert_summary', lambda **kwargs: [])
 
     response = client.get('/scoreboard')
 
@@ -118,3 +124,113 @@ def test_scoreboard_route_groups_by_decision_and_applies_tone(client, monkeypatc
     # the tone class.
     assert response.text.count('tone-good') == 3
     assert response.text.count('tone-serious') == 3
+
+
+def test_scoreboard_route_passes_filters_to_fetch_functions(client, monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        routes, 'fetch_scoreboard_alert_breakdown',
+        lambda **kwargs: calls.append(('breakdown', kwargs)) or [],
+    )
+    monkeypatch.setattr(
+        routes, 'fetch_scoreboard_missed_alert_summary',
+        lambda **kwargs: calls.append(('missed', kwargs)) or [],
+    )
+
+    response = client.get(
+        '/scoreboard',
+        params={
+            'start_date': '2026-09-01',
+            'end_date': '2026-09-02',
+            'version': '0.2',
+            'include_debug_user': 'on',
+        },
+    )
+
+    assert response.status_code == 200
+    breakdown_kwargs = next(kwargs for name, kwargs in calls if name == 'breakdown')
+    assert breakdown_kwargs['from_at'] == '2026-09-01T00:00:00+00:00'
+    assert breakdown_kwargs['to_before'] == '2026-09-03T00:00:00+00:00'
+    assert breakdown_kwargs['version'] == 0.2
+    assert breakdown_kwargs['exclude_debug_user'] is False
+    # Form reflects the submitted filters back (not just defaults).
+    assert 'value="2026-09-01"' in response.text
+    assert 'value="0.2"' in response.text
+    assert 'checked' in response.text
+
+
+def test_scoreboard_route_rejects_start_after_end(client, monkeypatch):
+    monkeypatch.setattr(routes, 'fetch_scoreboard_alert_breakdown', lambda **kwargs: [])
+    monkeypatch.setattr(routes, 'fetch_scoreboard_missed_alert_summary', lambda **kwargs: [])
+
+    response = client.get(
+        '/scoreboard',
+        params={'start_date': '2026-09-05', 'end_date': '2026-09-01'},
+    )
+
+    assert response.status_code == 200
+    assert 'Start date must be on or before end date.' in response.text
+
+
+def test_scoreboard_route_rejects_non_numeric_version(client, monkeypatch):
+    monkeypatch.setattr(routes, 'fetch_scoreboard_alert_breakdown', lambda **kwargs: [])
+    monkeypatch.setattr(routes, 'fetch_scoreboard_missed_alert_summary', lambda **kwargs: [])
+
+    response = client.get('/scoreboard', params={'version': 'not-a-number'})
+
+    assert response.status_code == 200
+    assert 'Version must be a number' in response.text
+
+
+def test_scoreboard_route_defaults_exclude_debug_user_on_fresh_visit(client, monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        routes, 'fetch_scoreboard_alert_breakdown',
+        lambda **kwargs: calls.append(kwargs) or [],
+    )
+    monkeypatch.setattr(routes, 'fetch_scoreboard_missed_alert_summary', lambda **kwargs: [])
+
+    response = client.get('/scoreboard')
+
+    assert response.status_code == 200
+    assert calls[0]['exclude_debug_user'] is True
+
+
+def test_scoreboard_route_renders_version_dropdown_from_db(client, monkeypatch):
+    monkeypatch.setattr(routes, 'fetch_scoreboard_alert_breakdown', lambda **kwargs: [])
+    monkeypatch.setattr(routes, 'fetch_scoreboard_missed_alert_summary', lambda **kwargs: [])
+    monkeypatch.setattr(routes, 'fetch_scoreboard_alert_versions', lambda: ['0.1', '0.2'])
+
+    response = client.get('/scoreboard', params={'version': '0.2'})
+
+    assert response.status_code == 200
+    assert '<option value="">All versions</option>' in response.text
+    assert '<option value="0.1" >0.1</option>' in response.text
+    assert '<option value="0.2" selected>0.2</option>' in response.text
+
+
+def test_scoreboard_route_keeps_stale_selected_version_in_options(client, monkeypatch):
+    # A version that's no longer in the DB (e.g. bookmarked URL) still
+    # shows as selected rather than silently resetting to "All versions".
+    monkeypatch.setattr(routes, 'fetch_scoreboard_alert_breakdown', lambda **kwargs: [])
+    monkeypatch.setattr(routes, 'fetch_scoreboard_missed_alert_summary', lambda **kwargs: [])
+    monkeypatch.setattr(routes, 'fetch_scoreboard_alert_versions', lambda: ['0.2'])
+
+    response = client.get('/scoreboard', params={'version': '0.1'})
+
+    assert response.status_code == 200
+    assert '<option value="0.1" selected>0.1</option>' in response.text
+
+
+def test_scoreboard_route_falls_back_when_versions_fetch_fails(client, monkeypatch):
+    def boom():
+        raise RuntimeError("db unreachable")
+
+    monkeypatch.setattr(routes, 'fetch_scoreboard_alert_breakdown', lambda **kwargs: [])
+    monkeypatch.setattr(routes, 'fetch_scoreboard_missed_alert_summary', lambda **kwargs: [])
+    monkeypatch.setattr(routes, 'fetch_scoreboard_alert_versions', boom)
+
+    response = client.get('/scoreboard')
+
+    assert response.status_code == 200
+    assert '<option value="">All versions</option>' in response.text

@@ -17,6 +17,36 @@
       </div>
     </header>
 
+    <form method="get" action="/scoreboard" class="filters">
+      <div class="filter-field">
+        <label for="start_date">Start date (UTC)</label>
+        <input id="start_date" name="start_date" type="date" value="{{ filters.start_date }}" />
+      </div>
+      <div class="filter-field">
+        <label for="end_date">End date (UTC)</label>
+        <input id="end_date" name="end_date" type="date" value="{{ filters.end_date }}" />
+      </div>
+      <div class="filter-field">
+        <label for="version">Alert service version</label>
+        <select id="version" name="version">
+          <option value="">All versions</option>
+          {% for value in version_options %}
+            <option value="{{ value }}" {% if value == filters.version %}selected{% endif %}>{{ value }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="filter-field filter-field-checkbox">
+        <label for="include_debug_user" class="checkbox-label">
+          <input id="include_debug_user" name="include_debug_user" type="checkbox" {% if filters.include_debug_user %}checked{% endif %} />
+          Include debug/simulated user
+        </label>
+      </div>
+      <div class="filter-actions">
+        <button type="submit">Apply filters</button>
+        <a href="/scoreboard" class="secondary-button secondary-link">Reset</a>
+      </div>
+    </form>
+
     {% if error_message %}
       <div class="alert alert-error"><strong>Unable to load scoreboard.</strong><span>{{ error_message }}</span></div>
     {% else %}

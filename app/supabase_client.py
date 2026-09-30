@@ -56,22 +56,54 @@ def fetch_recent_logs(
     return response.data or []
 
 
-def fetch_scoreboard_alert_breakdown() -> list[dict[str, Any]]:
+def fetch_scoreboard_alert_breakdown(
+    from_at: str | None = None,
+    to_before: str | None = None,
+    version: float | None = None,
+    exclude_debug_user: bool = True,
+) -> list[dict[str, Any]]:
     """PB-549: raw alerts breakdown via the scoreboard_alert_breakdown() DB
     function. TP/FP/FN classification is intentionally not computed --
     pending Scott's definitions; this surfaces counts for that conversation.
     """
     client = get_supabase_client()
-    response = client.rpc("scoreboard_alert_breakdown").execute()
+    response = client.rpc(
+        "scoreboard_alert_breakdown",
+        {
+            "p_from": from_at,
+            "p_to": to_before,
+            "p_version": version,
+            "p_exclude_debug_user": exclude_debug_user,
+        },
+    ).execute()
     return response.data or []
 
 
-def fetch_scoreboard_missed_alert_summary() -> list[dict[str, Any]]:
+def fetch_scoreboard_missed_alert_summary(
+    from_at: str | None = None,
+    to_before: str | None = None,
+    exclude_debug_user: bool = True,
+) -> list[dict[str, Any]]:
     """PB-549: missed_alert_feedback counts by scope via the
     scoreboard_missed_alert_summary() DB function."""
     client = get_supabase_client()
-    response = client.rpc("scoreboard_missed_alert_summary").execute()
+    response = client.rpc(
+        "scoreboard_missed_alert_summary",
+        {
+            "p_from": from_at,
+            "p_to": to_before,
+            "p_exclude_debug_user": exclude_debug_user,
+        },
+    ).execute()
     return response.data or []
+
+
+def fetch_scoreboard_alert_versions() -> list[str]:
+    """PB-549: distinct alert_service_version values in use, for the
+    scoreboard page's version filter dropdown."""
+    client = get_supabase_client()
+    response = client.rpc("scoreboard_alert_versions").execute()
+    return [str(row["version"]) for row in response.data or [] if row.get("version") is not None]
 
 
 _filter_options_cache: tuple[float, tuple[str, str, str], dict[str, list[str]]] | None = None
