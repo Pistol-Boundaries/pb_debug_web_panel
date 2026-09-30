@@ -118,7 +118,7 @@
       points.forEach((point, index) => {
         const date = parseTimestamp(point.occurred_at || "");
         if (!Number.isNaN(date.getTime())) {
-          point.label = `${date.toLocaleString()} · ${point.user_id}`;
+          point.label = `${date.toLocaleString()} · ${point.user_id} · ${point.platform || "unknown"}`;
           const label = pointLabels[index];
           if (label) label.textContent = point.label;
         }

@@ -194,6 +194,29 @@ def test_map_explicit_empty_times_remain_unrestricted(client, monkeypatch):
     assert response.context['filters']['start_time'] == ''
 
 
+def test_map_points_include_platform_in_label(client, monkeypatch):
+    rows = [
+        dict(lat=1, lng=1, occurred_at='2026-09-29T09:36:00Z', user_id='u', session_id='s1', platform='android'),
+        dict(lat=2, lng=2, occurred_at='2026-09-29T09:37:00Z', user_id='u', session_id='s2', platform='ios'),
+        dict(lat=3, lng=3, occurred_at='2026-09-29T09:38:00Z', user_id='u', session_id='s3', platform=None),
+    ]
+    monkeypatch.setattr(routes, 'fetch_filter_options', lambda: {'user_id': ['u'], 'type': ['location_reading']})
+    monkeypatch.setattr(routes, 'fetch_recent_logs', MagicMock(side_effect=[rows, []]))
+
+    response = client.get('/map')
+
+    points = response.context['points']
+    platforms = {p['platform'] for p in points}
+    assert platforms == {'android', 'ios', 'unknown'}
+    android_point = next(p for p in points if p['platform'] == 'android')
+    assert 'android' in android_point['label']
+    # Same field the JS tooltip/list rebuild reads client-side (map.html),
+    # server-rendered here so it's present even without JS.
+    assert 'android' in response.text
+    assert 'ios' in response.text
+    assert 'unknown' in response.text
+
+
 def test_map_fetches_multiple_batches_and_caps(client, monkeypatch):
     row = dict(lat=0, lng=0, occurred_at='2026-09-15T12:00:00Z', user_id='u', session_id='s')
     fetch = MagicMock(side_effect=[[row] * 500, [row] * 100, []])
