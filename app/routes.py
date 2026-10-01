@@ -16,6 +16,7 @@ from app.supabase_client import (
     fetch_scoreboard_alert_scopes,
     fetch_scoreboard_alert_sdk_versions,
     fetch_scoreboard_alert_versions,
+    fetch_scoreboard_change_log,
     fetch_scoreboard_missed_alert_classification,
     fetch_scoreboard_missed_alert_summary,
 )
@@ -317,6 +318,7 @@ async def scoreboard(request: Request) -> HTMLResponse:
     breakdown: list[dict[str, Any]] = []
     missed_summary: list[dict[str, Any]] = []
     missed_classification: list[dict[str, Any]] = []
+    change_log: list[dict[str, Any]] = []
     error_message: str | None = None
     try:
         start_value = _parse_date(start_date) if start_date else None
@@ -360,6 +362,10 @@ async def scoreboard(request: Request) -> HTMLResponse:
             from_at=from_at,
             to_before=to_before,
             exclude_debug_user=exclude_debug_user,
+        )
+        change_log = fetch_scoreboard_change_log(
+            from_at=from_at,
+            to_before=to_before,
         )
     except ValueError as exc:
         error_message = str(exc)
@@ -488,6 +494,15 @@ async def scoreboard(request: Request) -> HTMLResponse:
     ]
     missed_classification_groups = [g for g in missed_classification_groups if g["bars"]]
 
+    change_log_rows = [
+        {
+            "occurred_at": _format_timestamp(row.get("occurred_at")),
+            "type": _display_value(row.get("type")),
+            "note": _display_value(row.get("note")),
+        }
+        for row in change_log
+    ]
+
     return templates.TemplateResponse(
         request,
         "scoreboard.html",
@@ -497,6 +512,7 @@ async def scoreboard(request: Request) -> HTMLResponse:
             "breakdown_groups": breakdown_groups,
             "missed_bars": missed_bars,
             "missed_classification_groups": missed_classification_groups,
+            "change_log_rows": change_log_rows,
             "total_alerts": total_alerts,
             "sent_total": sent_total,
             "suppressed_total": suppressed_total,

@@ -57,6 +57,24 @@ def test_fetch_scoreboard_missed_alert_summary_calls_rpc(monkeypatch):
     assert result == [{'alert_scope': 'location', 'report_count': 3}]
 
 
+def test_fetch_scoreboard_change_log_calls_rpc(monkeypatch):
+    rpc = MagicMock()
+    rpc.execute.return_value = SimpleNamespace(
+        data=[{'occurred_at': '2026-09-20T00:00:00+00:00', 'type': 'sdk_update', 'note': 'Bumped TS to 5.9'}]
+    )
+    db = MagicMock()
+    db.rpc.return_value = rpc
+    monkeypatch.setattr(supabase_client, 'get_supabase_client', lambda: db)
+
+    result = supabase_client.fetch_scoreboard_change_log()
+
+    db.rpc.assert_called_once_with(
+        'scoreboard_change_log_entries',
+        {'p_from': None, 'p_to': None},
+    )
+    assert result == [{'occurred_at': '2026-09-20T00:00:00+00:00', 'type': 'sdk_update', 'note': 'Bumped TS to 5.9'}]
+
+
 def test_scoreboard_route_requires_auth():
     app = FastAPI()
     app.include_router(routes.router)
@@ -78,6 +96,7 @@ def test_scoreboard_route_renders_breakdown_and_excludes_muted_from_total(client
     monkeypatch.setattr(routes, 'fetch_scoreboard_alert_breakdown', lambda **kwargs: breakdown)
     monkeypatch.setattr(routes, 'fetch_scoreboard_missed_alert_summary', lambda **kwargs: [])
     monkeypatch.setattr(routes, 'fetch_scoreboard_missed_alert_classification', lambda **kwargs: [])
+    monkeypatch.setattr(routes, 'fetch_scoreboard_change_log', lambda **kwargs: [])
 
     response = client.get('/scoreboard')
 
@@ -113,6 +132,7 @@ def test_scoreboard_route_groups_by_decision_and_applies_tone(client, monkeypatc
     monkeypatch.setattr(routes, 'fetch_scoreboard_alert_breakdown', lambda **kwargs: breakdown)
     monkeypatch.setattr(routes, 'fetch_scoreboard_missed_alert_summary', lambda **kwargs: [])
     monkeypatch.setattr(routes, 'fetch_scoreboard_missed_alert_classification', lambda **kwargs: [])
+    monkeypatch.setattr(routes, 'fetch_scoreboard_change_log', lambda **kwargs: [])
 
     response = client.get('/scoreboard')
 
@@ -145,6 +165,10 @@ def test_scoreboard_route_passes_filters_to_fetch_functions(client, monkeypatch)
         routes, 'fetch_scoreboard_missed_alert_classification',
         lambda **kwargs: calls.append(('classification', kwargs)) or [],
     )
+    monkeypatch.setattr(
+        routes, 'fetch_scoreboard_change_log',
+        lambda **kwargs: calls.append(('change_log', kwargs)) or [],
+    )
 
     response = client.get(
         '/scoreboard',
@@ -172,6 +196,7 @@ def test_scoreboard_route_rejects_start_after_end(client, monkeypatch):
     monkeypatch.setattr(routes, 'fetch_scoreboard_alert_breakdown', lambda **kwargs: [])
     monkeypatch.setattr(routes, 'fetch_scoreboard_missed_alert_summary', lambda **kwargs: [])
     monkeypatch.setattr(routes, 'fetch_scoreboard_missed_alert_classification', lambda **kwargs: [])
+    monkeypatch.setattr(routes, 'fetch_scoreboard_change_log', lambda **kwargs: [])
 
     response = client.get(
         '/scoreboard',
@@ -186,6 +211,7 @@ def test_scoreboard_route_rejects_non_numeric_version(client, monkeypatch):
     monkeypatch.setattr(routes, 'fetch_scoreboard_alert_breakdown', lambda **kwargs: [])
     monkeypatch.setattr(routes, 'fetch_scoreboard_missed_alert_summary', lambda **kwargs: [])
     monkeypatch.setattr(routes, 'fetch_scoreboard_missed_alert_classification', lambda **kwargs: [])
+    monkeypatch.setattr(routes, 'fetch_scoreboard_change_log', lambda **kwargs: [])
 
     response = client.get('/scoreboard', params={'version': 'not-a-number'})
 
@@ -201,6 +227,7 @@ def test_scoreboard_route_defaults_exclude_debug_user_on_fresh_visit(client, mon
     )
     monkeypatch.setattr(routes, 'fetch_scoreboard_missed_alert_summary', lambda **kwargs: [])
     monkeypatch.setattr(routes, 'fetch_scoreboard_missed_alert_classification', lambda **kwargs: [])
+    monkeypatch.setattr(routes, 'fetch_scoreboard_change_log', lambda **kwargs: [])
 
     response = client.get('/scoreboard')
 
@@ -212,6 +239,7 @@ def test_scoreboard_route_renders_version_dropdown_from_db(client, monkeypatch):
     monkeypatch.setattr(routes, 'fetch_scoreboard_alert_breakdown', lambda **kwargs: [])
     monkeypatch.setattr(routes, 'fetch_scoreboard_missed_alert_summary', lambda **kwargs: [])
     monkeypatch.setattr(routes, 'fetch_scoreboard_missed_alert_classification', lambda **kwargs: [])
+    monkeypatch.setattr(routes, 'fetch_scoreboard_change_log', lambda **kwargs: [])
     monkeypatch.setattr(routes, 'fetch_scoreboard_alert_versions', lambda: ['0.1', '0.2'])
 
     response = client.get('/scoreboard', params={'version': '0.2'})
@@ -228,6 +256,7 @@ def test_scoreboard_route_keeps_stale_selected_version_in_options(client, monkey
     monkeypatch.setattr(routes, 'fetch_scoreboard_alert_breakdown', lambda **kwargs: [])
     monkeypatch.setattr(routes, 'fetch_scoreboard_missed_alert_summary', lambda **kwargs: [])
     monkeypatch.setattr(routes, 'fetch_scoreboard_missed_alert_classification', lambda **kwargs: [])
+    monkeypatch.setattr(routes, 'fetch_scoreboard_change_log', lambda **kwargs: [])
     monkeypatch.setattr(routes, 'fetch_scoreboard_alert_versions', lambda: ['0.2'])
 
     response = client.get('/scoreboard', params={'version': '0.1'})
@@ -243,6 +272,7 @@ def test_scoreboard_route_falls_back_when_versions_fetch_fails(client, monkeypat
     monkeypatch.setattr(routes, 'fetch_scoreboard_alert_breakdown', lambda **kwargs: [])
     monkeypatch.setattr(routes, 'fetch_scoreboard_missed_alert_summary', lambda **kwargs: [])
     monkeypatch.setattr(routes, 'fetch_scoreboard_missed_alert_classification', lambda **kwargs: [])
+    monkeypatch.setattr(routes, 'fetch_scoreboard_change_log', lambda **kwargs: [])
     monkeypatch.setattr(routes, 'fetch_scoreboard_alert_versions', boom)
 
     response = client.get('/scoreboard')
@@ -280,6 +310,7 @@ def test_scoreboard_route_groups_missed_alert_classification_with_distinct_tones
             {'alert_scope': 'location', 'classification': 'no_event_received', 'report_count': 24},
         ],
     )
+    monkeypatch.setattr(routes, 'fetch_scoreboard_change_log', lambda **kwargs: [])
 
     response = client.get('/scoreboard')
 
@@ -302,6 +333,7 @@ def test_scoreboard_route_shows_empty_state_with_no_missed_classification(client
     monkeypatch.setattr(routes, 'fetch_scoreboard_alert_breakdown', lambda **kwargs: [])
     monkeypatch.setattr(routes, 'fetch_scoreboard_missed_alert_summary', lambda **kwargs: [])
     monkeypatch.setattr(routes, 'fetch_scoreboard_missed_alert_classification', lambda **kwargs: [])
+    monkeypatch.setattr(routes, 'fetch_scoreboard_change_log', lambda **kwargs: [])
 
     response = client.get('/scoreboard')
 
@@ -356,6 +388,7 @@ def test_scoreboard_route_passes_scope_platform_sdk_filters(client, monkeypatch)
     )
     monkeypatch.setattr(routes, 'fetch_scoreboard_missed_alert_summary', lambda **kwargs: [])
     monkeypatch.setattr(routes, 'fetch_scoreboard_missed_alert_classification', lambda **kwargs: [])
+    monkeypatch.setattr(routes, 'fetch_scoreboard_change_log', lambda **kwargs: [])
     monkeypatch.setattr(routes, 'fetch_scoreboard_alert_scopes', lambda: ['location', 'building'])
     monkeypatch.setattr(routes, 'fetch_scoreboard_alert_platforms', lambda: ['Android', 'iOS'])
     monkeypatch.setattr(routes, 'fetch_scoreboard_alert_sdk_versions', lambda: ['3.18.10'])
@@ -382,6 +415,7 @@ def test_scoreboard_route_falls_back_when_scope_platform_sdk_fetch_fails(client,
     monkeypatch.setattr(routes, 'fetch_scoreboard_alert_breakdown', lambda **kwargs: [])
     monkeypatch.setattr(routes, 'fetch_scoreboard_missed_alert_summary', lambda **kwargs: [])
     monkeypatch.setattr(routes, 'fetch_scoreboard_missed_alert_classification', lambda **kwargs: [])
+    monkeypatch.setattr(routes, 'fetch_scoreboard_change_log', lambda **kwargs: [])
     monkeypatch.setattr(routes, 'fetch_scoreboard_alert_scopes', boom)
     monkeypatch.setattr(routes, 'fetch_scoreboard_alert_platforms', boom)
     monkeypatch.setattr(routes, 'fetch_scoreboard_alert_sdk_versions', boom)
@@ -392,3 +426,33 @@ def test_scoreboard_route_falls_back_when_scope_platform_sdk_fetch_fails(client,
     assert '<option value="">All scopes</option>' in response.text
     assert '<option value="">All platforms</option>' in response.text
     assert '<option value="">All SDK versions</option>' in response.text
+
+
+def test_scoreboard_route_renders_change_log_rows(client, monkeypatch):
+    monkeypatch.setattr(routes, 'fetch_scoreboard_alert_breakdown', lambda **kwargs: [])
+    monkeypatch.setattr(routes, 'fetch_scoreboard_missed_alert_summary', lambda **kwargs: [])
+    monkeypatch.setattr(routes, 'fetch_scoreboard_missed_alert_classification', lambda **kwargs: [])
+    monkeypatch.setattr(
+        routes, 'fetch_scoreboard_change_log',
+        lambda **kwargs: [
+            {'occurred_at': '2026-09-20T00:00:00+00:00', 'type': 'sdk_update', 'note': 'Bumped TS to 5.9'},
+        ],
+    )
+
+    response = client.get('/scoreboard')
+
+    assert response.status_code == 200
+    assert 'sdk_update' in response.text
+    assert 'Bumped TS to 5.9' in response.text
+
+
+def test_scoreboard_route_shows_empty_state_with_no_change_log(client, monkeypatch):
+    monkeypatch.setattr(routes, 'fetch_scoreboard_alert_breakdown', lambda **kwargs: [])
+    monkeypatch.setattr(routes, 'fetch_scoreboard_missed_alert_summary', lambda **kwargs: [])
+    monkeypatch.setattr(routes, 'fetch_scoreboard_missed_alert_classification', lambda **kwargs: [])
+    monkeypatch.setattr(routes, 'fetch_scoreboard_change_log', lambda **kwargs: [])
+
+    response = client.get('/scoreboard')
+
+    assert response.status_code == 200
+    assert 'No change-log entries in this range.' in response.text
