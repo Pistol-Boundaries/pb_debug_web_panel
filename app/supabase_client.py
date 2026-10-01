@@ -157,6 +157,22 @@ def fetch_scoreboard_alert_versions() -> list[str]:
     return [str(row["version"]) for row in response.data or [] if row.get("version") is not None]
 
 
+def fetch_scoreboard_change_log(
+    from_at: str | None = None,
+    to_before: str | None = None,
+) -> list[dict[str, Any]]:
+    """PB-549: manually-curated Radar settings/SDK update/geofence-publish
+    entries in a date range, via the scoreboard_change_log_entries() DB
+    function. Entries are added by hand via the SQL editor -- this is a
+    read-only display, no write path from the panel."""
+    client = get_supabase_client()
+    response = client.rpc(
+        "scoreboard_change_log_entries",
+        {"p_from": from_at, "p_to": to_before},
+    ).execute()
+    return response.data or []
+
+
 _filter_options_cache: tuple[float, tuple[str, str, str], dict[str, list[str]]] | None = None
 
 
