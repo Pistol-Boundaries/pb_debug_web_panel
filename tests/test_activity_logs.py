@@ -280,3 +280,14 @@ def test_map_multi_user_dropdown(client, monkeypatch):
     response = client.get('/map?user_id=older-user')
     assert 'value="older-user" selected' in response.text
     assert 'Could not load all user choices' in response.text
+
+
+def test_map_passes_beacon_metadata(client, monkeypatch):
+    row = dict(lat=1, lng=2, occurred_at='2026-10-06T12:00:00Z', user_id='u', session_id='s', type='upload', label='Beacon point queued', motion_state='still', note='<b>stop point</b>')
+    monkeypatch.setattr(routes, 'fetch_filter_options', lambda: {'user_id': ['u'], 'type': []})
+    monkeypatch.setattr(routes, 'fetch_recent_logs', MagicMock(side_effect=[[row], []]))
+    response = client.get('/map')
+    point = response.context['points'][0]
+    for key in ('type', 'label', 'motion_state', 'note', 'occurred_at'):
+        assert point[key] == row[key]
+    assert '<b>stop point</b>' not in response.text

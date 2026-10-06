@@ -63,6 +63,7 @@
       <div class="empty-state">No location records found.</div>
     {% else %}
     <section class="map-stack">
+      <p class="map-legend">Blue: location · Orange: beacon · Red: beacon stop</p>
       <div id="recent-map" class="map-canvas" aria-label="Recent locations map"></div>
 
       <aside class="map-sidebar">
@@ -70,7 +71,7 @@
         <ol class="map-point-list">
           {% for point in points %}
             <li>
-              <strong>{{ point.label }}</strong>
+              <strong>{{ point.display_label }}</strong>
               <span>{{ point.lat }}, {{ point.lng }}</span>
             </li>
           {% endfor %}
@@ -118,9 +119,13 @@
       points.forEach((point, index) => {
         const date = parseTimestamp(point.occurred_at || "");
         if (!Number.isNaN(date.getTime())) {
+<<<<<<< Updated upstream
           point.label = `${date.toLocaleString()} · ${point.user_id} · ${point.platform || "unknown"}`;
+=======
+          point.display_label = `${date.toLocaleString()} · ${point.user_id}`;
+>>>>>>> Stashed changes
           const label = pointLabels[index];
-          if (label) label.textContent = point.label;
+          if (label) label.textContent = point.display_label;
         }
       });
       if (!points.length || typeof L === "undefined") {
@@ -137,10 +142,14 @@
         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
       }).addTo(map);
 
+      const isBeacon = (point) => point.type === "upload" && point.label === "Beacon point queued";
+      map.createPane("beacons");
+      map.getPane("beacons").style.zIndex = "450";
+      const beaconLayer = L.layerGroup().addTo(map);
       const latLngs = points.map((point) => [point.lat, point.lng]);
       const tracks = new Map();
       points.forEach((point) => {
-        if (!point.session_id) return;
+        if (!point.session_id || isBeacon(point)) return;
         const key = JSON.stringify([point.user_id, point.session_id]);
         if (!tracks.has(key)) tracks.set(key, []);
         tracks.get(key).push([point.lat, point.lng]);
@@ -151,15 +160,27 @@
 
       points.forEach((point, index) => {
         const popup = document.createElement("div");
-        popup.textContent = `${index + 1}. ${point.label} — ${point.lat}, ${point.lng}`;
+        const beacon = isBeacon(point);
+        if (beacon) {
+          const date = parseTimestamp(point.occurred_at || "");
+          const time = Number.isNaN(date.getTime()) ? point.occurred_at : date.toLocaleString();
+          [point.label, point.note || "—", `Occurred: ${time}`].forEach((text) => {
+            const line = document.createElement("div");
+            line.textContent = text;
+            popup.appendChild(line);
+          });
+        } else {
+          popup.textContent = `${index + 1}. ${point.display_label} — ${point.lat}, ${point.lng}`;
+        }
         L.circleMarker([point.lat, point.lng], {
-          radius: 4,
+          pane: beacon ? "beacons" : "overlayPane",
+          radius: beacon ? 5 : 4,
           color: "#fff",
           weight: 1,
-          fillColor: "#2e6fbb",
+          fillColor: beacon ? (point.motion_state === "still" ? "#dc2626" : "#f97316") : "#2e6fbb",
           fillOpacity: 0.9,
         })
-          .addTo(map)
+          .addTo(beacon ? beaconLayer : map)
           .bindPopup(popup);
       });
 

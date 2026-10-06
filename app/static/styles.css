@@ -677,3 +677,5 @@ tbody tr:nth-child(even) {
     gap: 0.625rem;
   }
 }
+
+.map-legend { margin: 0; padding: 0.75rem 1.5rem; color: var(--muted); }
