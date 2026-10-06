@@ -209,7 +209,7 @@ def test_map_points_include_platform_in_label(client, monkeypatch):
     platforms = {p['platform'] for p in points}
     assert platforms == {'android', 'ios', 'unknown'}
     android_point = next(p for p in points if p['platform'] == 'android')
-    assert 'android' in android_point['label']
+    assert 'android' in android_point['display_label']
     # Same field the JS tooltip/list rebuild reads client-side (map.html),
     # server-rendered here so it's present even without JS.
     assert 'android' in response.text

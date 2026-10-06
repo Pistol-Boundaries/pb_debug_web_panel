@@ -239,16 +239,12 @@ async def map_view(request: Request) -> HTMLResponse:
                 "occurred_at": row.get("occurred_at"),
                 "lat": row["lat"],
                 "lng": row["lng"],
-<<<<<<< Updated upstream
                 "platform": row.get("platform") or "unknown",
-                "label": f"{row.get('occurred_at')} · {row.get('user_id')} · {row.get('platform') or 'unknown'}",
-=======
                 "label": row.get("label"),
                 "type": row.get("type"),
                 "motion_state": row.get("motion_state"),
                 "note": row.get("note"),
-                "display_label": f"{row.get('occurred_at')} · {row.get('user_id')}",
->>>>>>> Stashed changes
+                "display_label": f"{row.get('occurred_at')} · {row.get('user_id')} · {row.get('platform') or 'unknown'}",
                 "user_id": row.get("user_id"),
                 "session_id": row.get("session_id"),
             }
