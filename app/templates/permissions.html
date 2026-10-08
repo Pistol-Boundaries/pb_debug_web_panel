@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+
+{% block title %}Permissions{% endblock %}
+
+{% block content %}
+  <section class="panel">
+    <header class="panel-header">
+      <div>
+        <h1>Permission States</h1>
+      </div>
+      <div class="panel-actions">
+        <a href="/" class="secondary-button secondary-link">Back to logs</a>
+        <a href="/scoreboard" class="secondary-button secondary-link">Scoreboard</a>
+        <form method="post" action="/logout">
+          <button type="submit" class="secondary-button">Log out</button>
+        </form>
+      </div>
+    </header>
+
+    {% if error_message %}
+      <div class="alert alert-error"><strong>Unable to load permission states.</strong><span>{{ error_message }}</span></div>
+    {% endif %}
+
+    <div class="chart-section">
+      <h2>Latest state per user</h2>
+      <p class="chart-note">
+        Each user's most recent <code>permission_state</code> row (logged on
+        app launch and whenever a permission changes). Tracking needs a paid
+        tier, Always location and the motion sheet shown; motion itself is
+        optional but improves movement detection.
+      </p>
+      <p class="chart-note">
+        {{ summary.users }} users &middot; {{ summary.always }} on Always &middot;
+        {{ summary.motion_granted }} with motion granted &middot;
+        {{ summary.notifications_on }} with notifications on
+      </p>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>User</th>
+              <th>Platform</th>
+              <th>Location</th>
+              <th>Precise</th>
+              <th>Motion</th>
+              <th>Notifications</th>
+              <th>Trigger</th>
+              <th>Updated</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in rows %}
+              <tr>
+                <td><a href="{{ row.logs_url }}">{{ row.user_id }}</a></td>
+                <td>{{ row.platform }} {{ row.app_version }}</td>
+                <td><span class="perm-badge tone-{{ row.location.tone }}">{{ row.location.text }}</span></td>
+                <td><span class="perm-badge tone-{{ row.precise.tone }}">{{ row.precise.text }}</span></td>
+                <td><span class="perm-badge tone-{{ row.motion.tone }}">{{ row.motion.text }}</span></td>
+                <td><span class="perm-badge tone-{{ row.notifications.tone }}">{{ row.notifications.text }}</span></td>
+                <td>{{ row.trigger }}</td>
+                <td>{{ row.occurred_at }}</td>
+              </tr>
+            {% else %}
+              <tr><td colspan="8">No permission_state rows yet. They appear once a build with PB-590 is running.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+{% endblock %}

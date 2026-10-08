@@ -540,6 +540,93 @@ async def scoreboard(request: Request) -> HTMLResponse:
     )
 
 
+_LOCATION_TONES = {"always": "good", "while_using": "warning"}
+_MOTION_TONES = {
+    "granted": "good",
+    "limited": "good",
+    "denied": "serious",
+    "permanentlyDenied": "serious",
+    "restricted": "serious",
+}
+
+
+def _bool_cell(value: Any) -> dict[str, str]:
+    if value is True:
+        return {"text": "on", "tone": "good"}
+    if value is False:
+        return {"text": "off", "tone": "warning"}
+    return {"text": "-", "tone": "neutral"}
+
+
+def _permission_rows(logs: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """PB-590: latest permission_state row per user (logs arrive newest
+    first), with a tone per cell for the badges."""
+    latest: dict[str, dict[str, Any]] = {}
+    for log in logs:
+        user_id = log.get("user_id")
+        if user_id and user_id not in latest:
+            latest[user_id] = log
+
+    rows = []
+    for user_id, log in latest.items():
+        payload = log.get("payload") if isinstance(log.get("payload"), dict) else {}
+        location = payload.get("location")
+        motion = payload.get("motion")
+        rows.append(
+            {
+                "user_id": user_id,
+                "logs_url": "/?" + urlencode({"users": user_id, "log_type": "permission_state"}),
+                "occurred_at": _format_timestamp(log.get("occurred_at")),
+                "platform": _display_value(log.get("platform")),
+                "app_version": _display_value(log.get("app_version")),
+                "trigger": _display_value(payload.get("trigger")),
+                "location": {
+                    "text": _display_value(location),
+                    "tone": _LOCATION_TONES.get(location, "critical" if location else "neutral"),
+                },
+                "precise": _bool_cell(payload.get("precise_location")),
+                "notifications": _bool_cell(payload.get("notifications")),
+                "motion": {
+                    "text": _display_value(motion),
+                    "tone": _MOTION_TONES.get(motion, "neutral"),
+                },
+            }
+        )
+    return rows
+
+
+@router.get("/permissions", response_class=HTMLResponse)
+async def permissions(request: Request) -> HTMLResponse:
+    if not _is_authenticated(request):
+        return _login_response(request)
+
+    rows: list[dict[str, Any]] = []
+    error_message: str | None = None
+    try:
+        logs = fetch_recent_logs(limit=1000, log_type="permission_state")
+        rows = _permission_rows(logs)
+    except Exception as exc:  # noqa: BLE001 - surface any fetch failure on the page
+        error_message = f"Could not load permission states: {exc}"
+
+    summary = {
+        "users": len(rows),
+        "always": sum(1 for r in rows if r["location"]["text"] == "always"),
+        "motion_granted": sum(1 for r in rows if r["motion"]["tone"] == "good"),
+        "notifications_on": sum(1 for r in rows if r["notifications"]["text"] == "on"),
+    }
+
+    return templates.TemplateResponse(
+        request,
+        "permissions.html",
+        {
+            "request": request,
+            "rows": rows,
+            "summary": summary,
+            "error_message": error_message,
+        },
+    )
+
+
 @router.post("/login", response_class=HTMLResponse)
 async def login(request: Request, password: str = Form(...)) -> HTMLResponse:
     settings = get_settings()
