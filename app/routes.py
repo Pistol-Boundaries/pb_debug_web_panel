@@ -92,8 +92,17 @@ async def index(request: Request) -> HTMLResponse:
     error_message: str | None = None
     start_date = request.query_params.get("start_date", "").strip()
     end_date = request.query_params.get("end_date", "").strip()
+    start_time = request.query_params.get("start_time", "").strip()
+    end_time = request.query_params.get("end_time", "").strip()
+    exact_times = "start_time" in request.query_params or "end_time" in request.query_params
+    # Explicit blank bounds remain unrestricted; legacy date links keep their semantics.
+    if not any(name in request.query_params for name in ("start_time", "end_time", "start_date", "end_date")):
+        now = datetime.now(timezone.utc).replace(microsecond=0)
+        start_time = (now - timedelta(hours=3)).isoformat()
+        end_time = now.isoformat()
+        exact_times = True
     users = ",".join(request.query_params.getlist("users")).strip()
-    log_type = request.query_params.get("log_type", "").strip()
+    log_types = list(dict.fromkeys(value.strip() for value in request.query_params.getlist("log_type") if value.strip()))
     platform = request.query_params.get("platform", "").strip().lower()
 
     try:
@@ -103,8 +112,8 @@ async def index(request: Request) -> HTMLResponse:
             raise ValueError("Page must be a positive whole number.")
         if page < 1:
             raise ValueError("Page must be a positive whole number.")
-        start_value = _parse_date(start_date) if start_date else None
-        end_value = _parse_date(end_date) if end_date else None
+        start_value = _parse_date(start_date) if start_date and not exact_times else None
+        end_value = _parse_date(end_date) if end_date and not exact_times else None
         user_ids = _parse_users(users)
 
         if start_value and end_value and start_value > end_value:
@@ -120,13 +129,34 @@ async def index(request: Request) -> HTMLResponse:
             next_day = end_value + timedelta(days=1)
             end_before = datetime.combine(next_day, time.min, tzinfo=timezone.utc).isoformat()
 
+        if exact_times:
+            bounds = []
+            for value in (start_time, end_time):
+                if not value:
+                    bounds.append(None)
+                    continue
+                try:
+                    parsed = datetime.fromisoformat(value)
+                except ValueError:
+                    raise ValueError("Enter a valid start/end date and time.")
+                bounds.append(parsed.replace(tzinfo=timezone.utc) if parsed.tzinfo is None
+                              else parsed.astimezone(timezone.utc))
+            start, end = bounds
+            if start and end and start >= end:
+                raise ValueError("Start time must be before end time.")
+            start_at = start.isoformat() if start else None
+            end_before = end.isoformat() if end else None
+        else:
+            # Preserve full-day UTC semantics for existing bookmarked date URLs.
+            start_time, end_time = start_at or "", end_before or ""
+
         rows = fetch_recent_logs(
             limit=page_size + 1,
             offset=(page - 1) * page_size,
             start_at=start_at,
             end_before=end_before,
             user_ids=user_ids,
-            log_type=log_type or None,
+            log_type=(log_types[0] if len(log_types) == 1 else log_types) or None,
             platform=platform or None,
         )
         has_older = len(rows) > page_size
@@ -150,13 +180,17 @@ async def index(request: Request) -> HTMLResponse:
         options = {"user_id": [], "type": []}
         options_warning = "Could not load all filter choices. Showing values from this page and current selections."
     user_options = sorted(set(options["user_id"]) | set(selected_users) | {log["user_id"] for log in logs if log.get("user_id") not in (None, "-")})
-    type_options = sorted(set(options["type"]) | ({log_type} if log_type else set()) | {log["type"] for log in logs if log.get("type") not in (None, "-")})
+    type_options = sorted(set(options["type"]) | set(log_types) | {log["type"] for log in logs if log.get("type") not in (None, "-")})
 
     def page_url(number: int) -> str:
         params = dict(request.query_params)
+        if exact_times:
+            params["start_time"] = start_time
+            params["end_time"] = end_time
         params["users"] = users
+        params["log_type"] = log_types
         params["page"] = str(number)
-        return "/?" + urlencode(params)
+        return "/?" + urlencode(params, doseq=True)
 
     return templates.TemplateResponse(
         request,
@@ -174,10 +208,10 @@ async def index(request: Request) -> HTMLResponse:
             "current_page_url": page_url(page),
             "error_message": error_message,
             "filters": {
-                "start_date": start_date,
-                "end_date": end_date,
+                "start_time": start_time,
+                "end_time": end_time,
                 "users": users,
-                "log_type": log_type,
+                "log_types": log_types,
                 "platform": platform,
             },
             "platform_options": [
@@ -269,6 +303,118 @@ async def map_view(request: Request) -> HTMLResponse:
         {"request": request, "points": points, "error_message": error_message, "filters": filters,
          "selected_users": selected_users, "user_options": user_options, "options_warning": options_warning},
     )
+
+
+@router.get("/trip", response_class=HTMLResponse)
+async def trip_view(request: Request) -> HTMLResponse:
+    if not _is_authenticated(request):
+        return _login_response(request)
+
+    filters = {name: request.query_params.get(name, "").strip()
+               for name in ("user_id", "start_date", "end_date", "start_time", "end_time")}
+    exact_times = "start_time" in request.query_params or "end_time" in request.query_params
+    if not any(name in request.query_params for name in ("start_time", "end_time", "start_date", "end_date")):
+        now = datetime.now(timezone.utc).replace(microsecond=0)
+        filters["start_time"] = (now - timedelta(hours=3)).isoformat()
+        filters["end_time"] = now.isoformat()
+        exact_times = True
+    log_types = list(dict.fromkeys(value.strip() for value in request.query_params.getlist("log_type") if value.strip()))
+    tab = request.query_params.get("tab", "map")
+    if tab not in ("map", "logs", "alerts"):
+        tab = "map"
+    submitted = any(name in request.query_params for name in filters)
+    error_message = None
+    points, logs = [], []
+    page, has_older, truncated = 1, False, False
+    ready = False
+    try:
+        if submitted:
+            if not filters["user_id"]:
+                raise ValueError("Choose a user to view a trip.")
+            if exact_times:
+                if not filters["start_time"] or not filters["end_time"]:
+                    raise ValueError("Enter both a start and end date and time.")
+                try:
+                    bounds = [datetime.fromisoformat(filters[name]) for name in ("start_time", "end_time")]
+                except ValueError:
+                    raise ValueError("Enter valid start and end dates and times.")
+                start, end = [value.replace(tzinfo=timezone.utc) if value.tzinfo is None
+                              else value.astimezone(timezone.utc) for value in bounds]
+                if start >= end:
+                    raise ValueError("Start time must be before end time.")
+            else:
+                # Existing date-only links still include the full UTC end date.
+                try:
+                    start_date = date.fromisoformat(filters["start_date"])
+                    end_date = date.fromisoformat(filters["end_date"])
+                except ValueError:
+                    raise ValueError("Enter valid start and end dates.")
+                if start_date > end_date:
+                    raise ValueError("Start date must be on or before end date.")
+                if end_date == date.max:
+                    raise ValueError("End date must be before December 31, 9999.")
+                start = datetime.combine(start_date, time.min, tzinfo=timezone.utc)
+                end = datetime.combine(end_date + timedelta(days=1), time.min, tzinfo=timezone.utc)
+            filters["start_time"], filters["end_time"] = start.isoformat(), end.isoformat()
+            try:
+                page = int(request.query_params.get("page", "1"))
+                if page < 1:
+                    raise ValueError
+            except ValueError:
+                raise ValueError("Page must be a positive whole number.")
+            query = dict(
+                user_ids=[filters["user_id"]],
+                start_at=start.isoformat(),
+                end_before=end.isoformat(),
+            )
+            if tab == "map":
+                rows = []
+                while len(rows) < 5001:
+                    batch = fetch_recent_logs(limit=min(500, 5001 - len(rows)),
+                                              offset=len(rows), locations_only=True, **query)
+                    if not batch:
+                        break
+                    rows.extend(batch)
+                truncated = len(rows) > 5000
+                points = [row for row in reversed(rows[:5000])
+                          if row.get("lat") is not None and row.get("lng") is not None]
+            elif tab == "logs":
+                rows = fetch_recent_logs(limit=101, offset=(page - 1) * 100,
+                                         log_type=log_types or None, **query)
+                logs, has_older = rows[:100], len(rows) > 100
+            ready = True
+    except Exception as exc:
+        error_message = str(exc)
+
+    options_warning = None
+    try:
+        options = fetch_filter_options()
+        user_options = options["user_id"]
+        type_options = options["type"]
+    except Exception:
+        user_options = []
+        type_options = []
+        options_warning = "Filter choices could not be loaded. Current selections remain available; refresh to retry."
+    user_options = sorted(set(user_options) | ({filters["user_id"]} if filters["user_id"] else set()))
+
+    type_options = sorted(set(type_options) | set(log_types) | {row["type"] for row in logs if row.get("type")})
+
+    def trip_url(target_tab: str, target_page: int = 1) -> str:
+        params = {**filters, "tab": target_tab} if submitted else {"tab": target_tab}
+        params["log_type"] = log_types
+        if target_page != 1:
+            params["page"] = str(target_page)
+        return "/trip?" + urlencode(params, doseq=True)
+
+    return templates.TemplateResponse(request, "trip.html", {
+        "request": request, "filters": filters, "tab": tab, "ready": ready,
+        "points": points, "logs": logs, "truncated": truncated,
+        "error_message": error_message, "options_warning": options_warning,
+        "user_options": user_options, "type_options": type_options, "selected_log_types": log_types, "page": page,
+        "tab_urls": {name: trip_url(name) for name in ("map", "logs", "alerts")},
+        "newer_url": trip_url("logs", page - 1) if page > 1 else None,
+        "older_url": trip_url("logs", page + 1) if has_older else None,
+    })
 
 
 def _breakdown_tone(row: dict[str, Any]) -> str:

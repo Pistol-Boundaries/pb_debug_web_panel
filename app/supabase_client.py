@@ -17,7 +17,7 @@ def fetch_recent_logs(
     start_at: str | None = None,
     end_before: str | None = None,
     user_ids: list[str] | None = None,
-    log_type: str | None = None,
+    log_type: str | list[str] | None = None,
     platform: str | None = None,
     locations_only: bool = False,
     offset: int = 0,
@@ -47,7 +47,7 @@ def fetch_recent_logs(
         else:
             query = query.in_("user_id", user_ids)
     if log_type:
-        query = query.eq("type", log_type)
+        query = query.in_("type", log_type) if isinstance(log_type, list) else query.eq("type", log_type)
     if platform:
         query = query.eq("platform", platform)
 

@@ -241,8 +241,8 @@ def test_dropdown_multiple_users_and_pagination(client, monkeypatch):
     assert fetch.call_args.kwargs['user_ids'] == ['a', 'b']
     assert response.context['selected_users'] == ['a', 'b']
     assert 'users=a%2Cb' in response.context['newer_url']
-    assert '<select id="log_type"' in response.text
-    assert 'value="custom" selected' in response.text
+    assert 'class="log-type-picker"' in response.text
+    assert 'value="custom" checked' in response.text
 
 
 def test_filter_options_batches_and_cache(monkeypatch):
@@ -291,3 +291,90 @@ def test_map_passes_beacon_metadata(client, monkeypatch):
     for key in ('type', 'label', 'motion_state', 'note', 'occurred_at'):
         assert point[key] == row[key]
     assert '<b>stop point</b>' not in response.text
+
+
+@pytest.mark.parametrize('start,end,expected_start,expected_end', [
+    ('2026-10-14T10:15:23-04:00', '2026-10-14T11:16:24-04:00', '2026-10-14T14:15:23+00:00', '2026-10-14T15:16:24+00:00'),
+    ('', '2026-10-14T15:16:24Z', None, '2026-10-14T15:16:24+00:00'),
+    ('2026-10-14T14:15:23', '', '2026-10-14T14:15:23+00:00', None),
+    ('', '', None, None),
+])
+def test_home_exact_times(client, monkeypatch, start, end, expected_start, expected_end):
+    fetch = MagicMock(return_value=[{'payload': None}] * 101)
+    monkeypatch.setattr(routes, 'fetch_recent_logs', fetch)
+    monkeypatch.setattr(routes, 'fetch_filter_options', lambda: {'user_id': [], 'type': []})
+    response = client.get('/', params={'start_time': start, 'end_time': end, 'users': 'walker'})
+    assert response.status_code == 200
+    assert fetch.call_args.kwargs['start_at'] == expected_start
+    assert fetch.call_args.kwargs['end_before'] == expected_end
+    assert 'type="datetime-local" step="1"' in response.text
+    from urllib.parse import parse_qs, urlparse
+    params = parse_qs(urlparse(response.context['older_url']).query, keep_blank_values=True)
+    assert params['start_time'] == [start]
+    assert params['end_time'] == [end]
+
+
+@pytest.mark.parametrize('start,end', [('bad', ''), ('2026-10-15T12:00', '2026-10-14T12:00'), ('2026-10-14T12:00', '2026-10-14T12:00')])
+def test_home_invalid_exact_times(client, monkeypatch, start, end):
+    fetch = MagicMock()
+    monkeypatch.setattr(routes, 'fetch_recent_logs', fetch)
+    monkeypatch.setattr(routes, 'fetch_filter_options', lambda: {'user_id': [], 'type': []})
+    assert 'Unable to load logs' in client.get('/', params={'start_time': start, 'end_time': end}).text
+    fetch.assert_not_called()
+
+
+def test_home_legacy_dates_populate_exact_time_inputs(client, monkeypatch):
+    monkeypatch.setattr(routes, 'fetch_recent_logs', lambda **kw: [])
+    monkeypatch.setattr(routes, 'fetch_filter_options', lambda: {'user_id': [], 'type': []})
+    response = client.get('/?start_date=2026-10-14&end_date=2026-10-14')
+    assert response.context['filters']['start_time'] == '2026-10-14T00:00:00+00:00'
+    assert response.context['filters']['end_time'] == '2026-10-15T00:00:00+00:00'
+
+
+def test_multiple_log_types_preserved_in_links_and_options(client, monkeypatch):
+    from urllib.parse import parse_qs, urlparse
+    fetch = MagicMock(return_value=[{'payload': None}] * 101)
+    monkeypatch.setattr(routes, 'fetch_recent_logs', fetch)
+    monkeypatch.setattr(routes, 'fetch_filter_options', lambda: {'user_id': [], 'type': ['location']})
+    response = client.get('/?log_type=location&log_type=upload&log_type=location&page=2')
+    assert fetch.call_args.kwargs['log_type'] == ['location', 'upload']
+    assert 'value="upload" checked' in response.text
+    assert '2 selected' in response.text
+    for key in ('newer_url', 'older_url', 'current_page_url'):
+        assert parse_qs(urlparse(response.context[key]).query)['log_type'] == ['location', 'upload']
+    client.get('/?log_type=')
+    assert fetch.call_args.kwargs['log_type'] is None
+
+
+def test_query_matches_any_selected_log_type(monkeypatch):
+    query = MagicMock()
+    for method in ('select', 'order', 'range', 'in_'):
+        getattr(query, method).return_value = query
+    query.execute.return_value = SimpleNamespace(data=[])
+    db = MagicMock()
+    db.table.return_value = query
+    monkeypatch.setattr(supabase_client, 'get_supabase_client', lambda: db)
+    monkeypatch.setattr(supabase_client, 'get_settings', lambda: SimpleNamespace(supabase_logs_table='activity_logs', default_log_limit=100))
+    supabase_client.fetch_recent_logs(log_type=['location', 'upload'])
+    query.in_.assert_called_once_with('type', ['location', 'upload'])
+    query.eq.assert_not_called()
+
+
+def test_home_defaults_to_last_three_hours_and_pins_pagination(client, monkeypatch):
+    from datetime import datetime, timedelta, timezone
+    from urllib.parse import parse_qs, urlparse
+    fetch = MagicMock(return_value=[{'payload': None}] * 101)
+    monkeypatch.setattr(routes, 'fetch_recent_logs', fetch)
+    monkeypatch.setattr(routes, 'fetch_filter_options', lambda: {'user_id': [], 'type': []})
+    response = client.get('/')
+    bounds = fetch.call_args.kwargs
+    start = datetime.fromisoformat(bounds['start_at'])
+    end = datetime.fromisoformat(bounds['end_before'])
+    assert end - start == timedelta(hours=3)
+    assert abs((datetime.now(timezone.utc) - end).total_seconds()) < 5
+    assert response.context['filters']['start_time'] == bounds['start_at']
+    for key in ('older_url', 'current_page_url'):
+        params = parse_qs(urlparse(response.context[key]).query)
+        assert params['start_time'] == [bounds['start_at']]
+        assert params['end_time'] == [bounds['end_before']]
+    assert 'Reset to last 3 hours' in response.text

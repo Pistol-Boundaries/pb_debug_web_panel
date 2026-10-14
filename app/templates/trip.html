@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% block title %}Trip Viewer{% endblock %}
+{% block extra_head %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+{% endblock %}
+{% block content %}
+<section class="panel trip-panel">
+  <header class="panel-header">
+    <div><h1>Trip Viewer</h1><p>Time filters use your browser timezone: <span id="trip-timezone">local time</span>.</p></div>
+    <div class="panel-actions">
+      <a href="/" class="secondary-button secondary-link">Activity logs</a>
+      <a href="/map" class="secondary-button secondary-link">Recent map</a>
+      <a href="/scoreboard" class="secondary-button secondary-link">Scoreboard</a>
+      <form method="post" action="/logout"><button class="secondary-button">Log out</button></form>
+    </div>
+  </header>
+  <form method="get" action="/trip" class="filters" id="trip-filters">
+    <input type="hidden" name="tab" value="{{ tab }}" />
+    {% if tab != "logs" %}{% for value in selected_log_types %}<input type="hidden" name="log_type" value="{{ value }}" />{% endfor %}{% endif %}
+    <div class="filter-field">
+      <label for="trip-user">User</label>
+      <select id="trip-user" name="user_id" required>
+        <option value="">Select a user</option>
+        {% for user in user_options %}
+          <option value="{{ user }}" {% if user == filters.user_id %}selected{% endif %}>{{ user }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="filter-field"><label for="start_time">Start time (local, inclusive)</label><input id="start_time" type="datetime-local" step="1" required /><input id="start_time_utc" name="start_time" type="hidden" value="{{ filters.start_time }}" /></div>
+    <div class="filter-field"><label for="end_time">End time (local, exclusive)</label><input id="end_time" type="datetime-local" step="1" required /><input id="end_time_utc" name="end_time" type="hidden" value="{{ filters.end_time }}" /></div>
+    {% if tab == "logs" %}<div class="filter-field">{% include "log_type_filter.html" %}</div>{% endif %}
+    <div class="filter-actions"><button type="submit">View trip</button><a href="/trip" class="secondary-button secondary-link">Reset to last 3 hours</a></div>
+  </form>
+  {% if options_warning %}<p class="empty-state">{{ options_warning }}</p>{% endif %}
+  <nav class="trip-tabs" aria-label="Trip views">
+    {% for name in ['map', 'logs', 'alerts'] %}
+    <a href="{{ tab_urls[name] }}" {% if tab == name %}aria-current="page"{% endif %}>{{ name | capitalize }}{% if name == 'alerts' %}<span>Coming soon</span>{% endif %}</a>
+    {% endfor %}
+  </nav>
+  {% if error_message %}
+    <div class="alert alert-error" role="alert"><strong>Unable to load trip.</strong> {{ error_message }}</div>
+  {% elif not ready %}
+    <div class="trip-empty"><h2>Start with a user and date range</h2><p>Explore their locations, review activity logs, and keep the same trip selected as you switch views.</p></div>
+  {% else %}
+    <div class="trip-context"><strong>{{ filters.user_id }}</strong><span><time data-time="{{ filters.start_time }}">{{ filters.start_time }}</time> → <time data-time="{{ filters.end_time }}">{{ filters.end_time }}</time> · End exclusive</span></div>
+    {% if tab == 'map' %}
+      {% if truncated %}<p class="alert">Showing the latest 5,000 locations. Narrow the date range to see every location in a smaller interval.</p>{% endif %}
+      {% if points %}
+      <div class="trip-map-heading"><div><h2>{{ points | length }} locations</h2><p>Oldest to newest · Select a location to inspect it. Lines connect points within each session.</p></div><button id="trip-fit" type="button" class="secondary-button">Fit all locations</button></div>
+      <p class="map-legend">Blue: location · Orange: beacon · Red: beacon stop · All times UTC</p>
+      <div class="trip-map-layout">
+        <div id="trip-map" aria-label="Trip locations map"></div>
+        <aside class="trip-locations" aria-label="Locations in time order"><ol>
+          {% for point in points %}<li><button type="button" data-point="{{ loop.index0 }}"><strong>{{ loop.index }}. <time data-time="{{ point.occurred_at }}">{{ point.occurred_at }}</time></strong><span>{{ point.label or point.type or 'Location' }}</span><small>{{ point.lat }}, {{ point.lng }}</small></button></li>{% endfor %}
+        </ol></aside>
+      </div>
+      {% else %}<div class="trip-empty"><h2>No locations in this range</h2><p>Try another date range, or check Logs for activity without coordinates.</p></div>{% endif %}
+    {% elif tab == 'logs' %}
+      <div class="trip-map-heading"><div><h2>Trip activity</h2><p>Newest first · All times UTC · Expand details to inspect the full record.</p></div><span>Page {{ page }}</span></div>
+      {% if logs %}
+      <div class="table-wrap"><table><thead><tr><th scope="col">Occurred (UTC)</th><th scope="col">Type</th><th scope="col">Event</th><th scope="col">Platform</th><th scope="col">Details</th></tr></thead><tbody>
+      {% for log in logs %}<tr>
+        <td><time data-time="{{ log.occurred_at or '' }}">{{ log.occurred_at or '—' }}</time></td><td>{{ log.type or '—' }}</td>
+        <td><strong>{{ log.label or '—' }}</strong>{% if log.note %}<p>{{ log.note }}</p>{% endif %}</td><td>{{ log.platform or '—' }}</td>
+        <td><details><summary>View record</summary><pre class="trip-record">{{ log | tojson(indent=2) }}</pre></details></td>
+      </tr>{% endfor %}
+      </tbody></table></div>
+      {% else %}<div class="trip-empty"><h2>No logs on this page</h2><p>Try another date range or log type selection{% if newer_url %} or return to newer logs{% endif %}.</p></div>{% endif %}
+      <nav class="trip-pagination" aria-label="Log pages">{% if newer_url %}<a class="secondary-button secondary-link" href="{{ newer_url }}">← Newer logs</a>{% endif %}{% if older_url %}<a class="secondary-button secondary-link" href="{{ older_url }}">Older logs →</a>{% endif %}</nav>
+    {% else %}
+      <div class="trip-empty"><span class="trip-badge">Coming soon</span><h2>Alerts, in trip context</h2><p>This view will show alerts for the selected user and date range. Trip alert data is not connected yet.</p><a href="{{ tab_urls['logs'] }}">Review trip logs →</a></div>
+    {% endif %}
+  {% endif %}
+</section>
+{% endblock %}
+{% block extra_scripts %}
+<script src="/static/log_type_filter.js?v=20261014"></script>
+<script id="trip-points" type="application/json">{{ points | tojson }}</script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<script src="/static/trip.js?v=20261014-times"></script>
+{% endblock %}

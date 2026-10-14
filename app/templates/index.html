@@ -7,10 +7,11 @@
     <header class="panel-header">
       <div>
         <h1>Activity Logs</h1>
-        <p>Latest events, newest first. Date filters use event time in UTC.</p>
+        <p>Latest events, newest first. Time filters use your browser timezone: <span id="log-filter-timezone">local time</span>.</p>
       </div>
       <div class="panel-actions">
         <a href="/map" class="secondary-button secondary-link">Recent map</a>
+        <a href="/trip" class="secondary-button secondary-link">Trip Viewer</a>
         <a href="/scoreboard" class="secondary-button secondary-link">Scoreboard</a>
         <a href="/permissions" class="secondary-button secondary-link">Permissions</a>
         <form method="post" action="/logout">
@@ -19,14 +20,16 @@
       </div>
     </header>
 
-    <form method="get" action="/" class="filters">
+    <form method="get" action="/" class="filters" id="log-filters">
       <div class="filter-field">
-        <label for="start_date">Start date (UTC)</label>
-        <input id="start_date" name="start_date" type="date" value="{{ filters.start_date }}" />
+        <label for="start_time">Start time (local, inclusive)</label>
+        <input id="start_time" type="datetime-local" step="1" />
+        <input id="start_time_utc" name="start_time" type="hidden" value="{{ filters.start_time }}" />
       </div>
       <div class="filter-field">
-        <label for="end_date">End date (UTC)</label>
-        <input id="end_date" name="end_date" type="date" value="{{ filters.end_date }}" />
+        <label for="end_time">End time (local, exclusive)</label>
+        <input id="end_time" type="datetime-local" step="1" />
+        <input id="end_time_utc" name="end_time" type="hidden" value="{{ filters.end_time }}" />
       </div>
       <div class="filter-field filter-field-wide">
         <label for="users">User</label>
@@ -38,13 +41,7 @@
         </select>
       </div>
       <div class="filter-field">
-        <label for="log_type">Log Type</label>
-        <select id="log_type" name="log_type">
-          <option value="">All log types</option>
-          {% for value in type_options %}
-            <option value="{{ value }}" {% if value == filters.log_type %}selected{% endif %}>{{ value }}</option>
-          {% endfor %}
-        </select>
+        {% with selected_log_types=filters.log_types %}{% include "log_type_filter.html" %}{% endwith %}
       </div>
       <div class="filter-field">
         <label for="platform">Platform</label>
@@ -58,7 +55,7 @@
         </select>
       </div>
       <div class="filter-field">
-        <label for="timezone_display">Timezone</label>
+        <label for="timezone_display">Log display timezone</label>
         <select id="timezone_display" class="js-timezone-select">
           <option value="browser">Browser local time</option>
           <option value="America/New_York">Eastern</option>
@@ -68,7 +65,7 @@
       <div class="filter-actions">
         <button type="submit">Apply filters</button>
         <a href="{{ current_page_url }}" class="secondary-button secondary-link">Refresh</a>
-        <a href="/" class="secondary-button secondary-link">Clear</a>
+        <a href="/" class="secondary-button secondary-link">Reset to last 3 hours</a>
       </div>
     </form>
 
@@ -158,8 +155,33 @@
 {% endblock %}
 
 {% block extra_scripts %}
+  <script src="/static/log_type_filter.js?v=20261014"></script>
   <script>
     (() => {
+      const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      document.getElementById("log-filter-timezone").textContent = zone;
+      function parseTimestamp(raw) {
+        // Older saved URLs used UTC without an explicit offset.
+        let value = raw.trim().replace(" ", "T");
+        if (/[+-]\d{2}$/.test(value)) value += ":00";
+        if (!/(Z|[+-]\d{2}:?\d{2})$/i.test(value)) value += "Z";
+        return new Date(value);
+      }
+      const timeFields = ["start_time", "end_time"];
+      const pad = (value) => String(value).padStart(2, "0");
+      timeFields.forEach((name) => {
+        const raw = document.getElementById(`${name}_utc`).value;
+        if (!raw) return;
+        const date = parseTimestamp(raw);
+        if (Number.isNaN(date.getTime())) return;
+        document.getElementById(name).value = `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+      });
+      document.getElementById("log-filters").addEventListener("submit", () => {
+        timeFields.forEach((name) => {
+          const value = document.getElementById(name).value;
+          document.getElementById(`${name}_utc`).value = value ? new Date(value).toISOString() : "";
+        });
+      });
       const STORAGE_KEY = "alert-log-timezone";
       const select = document.querySelector(".js-timezone-select");
       const cells = document.querySelectorAll(".timestamp-cell");
