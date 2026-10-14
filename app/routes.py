@@ -10,6 +10,7 @@ from fastapi.templating import Jinja2Templates
 from app.config import get_settings
 from app.supabase_client import (
     fetch_recent_logs,
+    fetch_trip_alerts,
     fetch_filter_options,
     fetch_scoreboard_alert_breakdown,
     fetch_scoreboard_alert_platforms,
@@ -319,12 +320,13 @@ async def trip_view(request: Request) -> HTMLResponse:
         filters["end_time"] = now.isoformat()
         exact_times = True
     log_types = list(dict.fromkeys(value.strip() for value in request.query_params.getlist("log_type") if value.strip()))
+    alert_scopes = list(dict.fromkeys(value.strip() for value in request.query_params.getlist("alert_scope") if value.strip()))
     tab = request.query_params.get("tab", "map")
     if tab not in ("map", "logs", "alerts"):
         tab = "map"
     submitted = any(name in request.query_params for name in filters)
     error_message = None
-    points, logs = [], []
+    points, logs, alerts = [], [], []
     page, has_older, truncated = 1, False, False
     ready = False
     try:
@@ -382,6 +384,11 @@ async def trip_view(request: Request) -> HTMLResponse:
                 rows = fetch_recent_logs(limit=101, offset=(page - 1) * 100,
                                          log_type=log_types or None, **query)
                 logs, has_older = rows[:100], len(rows) > 100
+            elif tab == "alerts":
+                rows = fetch_trip_alerts(user_id=filters["user_id"], start_at=start.isoformat(),
+                                         end_before=end.isoformat(), limit=101, offset=(page - 1) * 100,
+                                         scopes=alert_scopes or None)
+                alerts, has_older = rows[:100], len(rows) > 100
             ready = True
     except Exception as exc:
         error_message = str(exc)
@@ -399,21 +406,31 @@ async def trip_view(request: Request) -> HTMLResponse:
 
     type_options = sorted(set(type_options) | set(log_types) | {row["type"] for row in logs if row.get("type")})
 
+    scope_options = []
+    if tab == "alerts":
+        try:
+            scope_options = fetch_scoreboard_alert_scopes()
+        except Exception:
+            options_warning = "Some filter choices could not be loaded. Current selections remain available; refresh to retry."
+    scope_options = sorted(set(scope_options) | set(alert_scopes) | {row["alert_scope"] for row in alerts if row.get("alert_scope")})
+
     def trip_url(target_tab: str, target_page: int = 1) -> str:
         params = {**filters, "tab": target_tab} if submitted else {"tab": target_tab}
         params["log_type"] = log_types
+        params["alert_scope"] = alert_scopes
         if target_page != 1:
             params["page"] = str(target_page)
         return "/trip?" + urlencode(params, doseq=True)
 
     return templates.TemplateResponse(request, "trip.html", {
         "request": request, "filters": filters, "tab": tab, "ready": ready,
-        "points": points, "logs": logs, "truncated": truncated,
+        "points": points, "logs": logs, "alerts": alerts, "truncated": truncated,
         "error_message": error_message, "options_warning": options_warning,
+        "scope_options": scope_options, "selected_alert_scopes": alert_scopes,
         "user_options": user_options, "type_options": type_options, "selected_log_types": log_types, "page": page,
         "tab_urls": {name: trip_url(name) for name in ("map", "logs", "alerts")},
-        "newer_url": trip_url("logs", page - 1) if page > 1 else None,
-        "older_url": trip_url("logs", page + 1) if has_older else None,
+        "newer_url": trip_url(tab, page - 1) if page > 1 else None,
+        "older_url": trip_url(tab, page + 1) if has_older else None,
     })
 
 

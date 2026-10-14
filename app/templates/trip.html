@@ -16,6 +16,7 @@
   </header>
   <form method="get" action="/trip" class="filters" id="trip-filters">
     <input type="hidden" name="tab" value="{{ tab }}" />
+    {% if tab != "alerts" %}{% for value in selected_alert_scopes %}<input type="hidden" name="alert_scope" value="{{ value }}" />{% endfor %}{% endif %}
     {% if tab != "logs" %}{% for value in selected_log_types %}<input type="hidden" name="log_type" value="{{ value }}" />{% endfor %}{% endif %}
     <div class="filter-field">
       <label for="trip-user">User</label>
@@ -29,12 +30,26 @@
     <div class="filter-field"><label for="start_time">Start time (local, inclusive)</label><input id="start_time" type="datetime-local" step="1" required /><input id="start_time_utc" name="start_time" type="hidden" value="{{ filters.start_time }}" /></div>
     <div class="filter-field"><label for="end_time">End time (local, exclusive)</label><input id="end_time" type="datetime-local" step="1" required /><input id="end_time_utc" name="end_time" type="hidden" value="{{ filters.end_time }}" /></div>
     {% if tab == "logs" %}<div class="filter-field">{% include "log_type_filter.html" %}</div>{% endif %}
-    <div class="filter-actions"><button type="submit">View trip</button><a href="/trip" class="secondary-button secondary-link">Reset to last 3 hours</a></div>
+    {% if tab == "alerts" %}
+    <div class="filter-field">
+      <span id="alert-scopes-label" class="filter-label">Alert scopes</span>
+      <details class="log-type-picker" data-multiselect data-empty-label="All alert scopes">
+        <summary>{{ selected_alert_scopes | length ~ ' selected' if selected_alert_scopes else 'All alert scopes' }}</summary>
+        <div class="log-type-options" role="group" aria-labelledby="alert-scopes-label">
+          <button type="button" class="secondary-button" data-clear-selection>Clear selection</button>
+          {% for value in scope_options %}
+          <label><input type="checkbox" name="alert_scope" value="{{ value }}" {% if value in selected_alert_scopes %}checked{% endif %} /> <span>{{ value }}</span></label>
+          {% else %}<p>No alert scopes available.</p>{% endfor %}
+        </div>
+      </details>
+    </div>
+    {% endif %}
+    <div class="filter-actions"><button type="submit">Apply Filters</button><a href="/trip" class="secondary-button secondary-link">Reset to last 3 hours</a></div>
   </form>
   {% if options_warning %}<p class="empty-state">{{ options_warning }}</p>{% endif %}
   <nav class="trip-tabs" aria-label="Trip views">
     {% for name in ['map', 'logs', 'alerts'] %}
-    <a href="{{ tab_urls[name] }}" {% if tab == name %}aria-current="page"{% endif %}>{{ name | capitalize }}{% if name == 'alerts' %}<span>Coming soon</span>{% endif %}</a>
+    <a href="{{ tab_urls[name] }}" {% if tab == name %}aria-current="page"{% endif %}>{{ name | capitalize }}</a>
     {% endfor %}
   </nav>
   {% if error_message %}
@@ -68,13 +83,28 @@
       {% else %}<div class="trip-empty"><h2>No logs on this page</h2><p>Try another date range or log type selection{% if newer_url %} or return to newer logs{% endif %}.</p></div>{% endif %}
       <nav class="trip-pagination" aria-label="Log pages">{% if newer_url %}<a class="secondary-button secondary-link" href="{{ newer_url }}">← Newer logs</a>{% endif %}{% if older_url %}<a class="secondary-button secondary-link" href="{{ older_url }}">Older logs →</a>{% endif %}</nav>
     {% else %}
-      <div class="trip-empty"><span class="trip-badge">Coming soon</span><h2>Alerts, in trip context</h2><p>This view will show alerts for the selected user and date range. Trip alert data is not connected yet.</p><a href="{{ tab_urls['logs'] }}">Review trip logs →</a></div>
+      <div class="trip-map-heading"><div><h2>Trip alerts</h2><p>Sent and suppressed records · Newest first · Filtered by creation time (UTC).</p></div><span>Page {{ page }} · {{ alerts | length }} alerts</span></div>
+      {% if alerts %}
+      <div class="table-wrap"><table>
+        <thead><tr><th scope="col">Created (UTC)</th><th scope="col">Place</th><th scope="col">Scope / type</th><th scope="col">Decision</th><th scope="col">Source</th><th scope="col">Feedback</th><th scope="col">Details</th></tr></thead>
+        <tbody>{% for alert in alerts %}<tr>
+          <td><time data-time="{{ alert.created_at or '' }}">{{ alert.created_at or '—' }}</time></td>
+          <td><strong>{{ alert.name or alert.jurisdiction_id or alert.location_id or '—' }}</strong>{% if alert.address %}<p>{{ alert.address }}</p>{% endif %}</td>
+          <td>{{ alert.alert_scope or '—' }}{% if alert.type %}<p>{{ alert.type }}</p>{% endif %}</td>
+          <td><strong>{{ alert.decision or '—' }}</strong>{% if alert.suppressed_reason %}<p>{{ alert.suppressed_reason }}</p>{% endif %}</td>
+          <td>{{ alert.source or '—' }}</td>
+          <td>Helpful: {{ alert.alert_helpful or 'none' }}{% if alert.alert_issue %}<p>{{ alert.alert_issue }}</p>{% endif %}{% if alert.feedback_notes %}<p>{{ alert.feedback_notes }}</p>{% endif %}</td>
+          <td><details><summary>View record</summary><pre class="trip-record">{{ alert | tojson(indent=2) }}</pre></details></td>
+        </tr>{% endfor %}</tbody>
+      </table></div>
+      {% else %}<div class="trip-empty"><h2>No alerts on this page</h2><p>Try another time range or scope selection{% if newer_url %} or return to newer alerts{% endif %}.</p></div>{% endif %}
+      <nav class="trip-pagination" aria-label="Alert pages">{% if newer_url %}<a class="secondary-button secondary-link" href="{{ newer_url }}">← Newer alerts</a>{% endif %}{% if older_url %}<a class="secondary-button secondary-link" href="{{ older_url }}">Older alerts →</a>{% endif %}</nav>
     {% endif %}
   {% endif %}
 </section>
 {% endblock %}
 {% block extra_scripts %}
-<script src="/static/log_type_filter.js?v=20261014"></script>
+<script src="/static/log_type_filter.js?v=20261014-scopes"></script>
 <script id="trip-points" type="application/json">{{ points | tojson }}</script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 <script src="/static/trip.js?v=20261014-times"></script>

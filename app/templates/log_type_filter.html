@@ -1,8 +1,8 @@
         <span id="log-types-label" class="filter-label">Log types</span>
-        <details class="log-type-picker">
+        <details class="log-type-picker" data-multiselect data-empty-label="All log types">
           <summary id="log-type-summary">{{ selected_log_types | length ~ ' selected' if selected_log_types else 'All log types' }}</summary>
           <div class="log-type-options" role="group" aria-labelledby="log-types-label">
-            <button type="button" id="clear-log-types" class="secondary-button">Clear selection</button>
+            <button type="button" id="clear-log-types" data-clear-selection class="secondary-button">Clear selection</button>
             {% for value in type_options %}
               <label><input type="checkbox" name="log_type" value="{{ value }}" {% if value in selected_log_types %}checked{% endif %} /> <span>{{ value }}</span></label>
             {% else %}<p>No log types available.</p>{% endfor %}

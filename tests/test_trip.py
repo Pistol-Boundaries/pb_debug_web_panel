@@ -9,6 +9,7 @@ from test_activity_logs import client
 @pytest.fixture(autouse=True)
 def options(monkeypatch):
     monkeypatch.setattr(routes, 'fetch_filter_options', lambda: {'user_id': ['walker'], 'type': []})
+    monkeypatch.setattr(routes, 'fetch_scoreboard_alert_scopes', lambda: ['location', 'jurisdiction'])
 
 
 def test_trip_requires_selection_and_auth(client, monkeypatch):
@@ -61,12 +62,14 @@ def test_trip_logs_pagination_and_escaping(client, monkeypatch):
     assert '&lt;script&gt;' in response.text
 
 
-def test_trip_alerts_are_not_a_zero_count(client, monkeypatch):
-    fetch = MagicMock()
-    monkeypatch.setattr(routes, 'fetch_recent_logs', fetch)
+def test_trip_alerts_empty(client, monkeypatch):
+    fetch = MagicMock(return_value=[])
+    monkeypatch.setattr(routes, 'fetch_trip_alerts', fetch)
     response = client.get('/trip', params={**PARAMS, 'tab': 'alerts'})
-    assert 'Trip alert data is not connected yet' in response.text
-    fetch.assert_not_called()
+    assert 'No alerts on this page' in response.text
+    assert 'Coming soon' not in response.text
+    fetch.assert_called_once_with(user_id='walker', start_at='2026-10-01T00:00:00+00:00',
+                                  end_before='2026-10-03T00:00:00+00:00', limit=101, offset=0, scopes=None)
 
 
 def test_trip_truncation_and_fetch_error(client, monkeypatch):
@@ -152,3 +155,108 @@ def test_trip_invalid_exact_bounds(client, monkeypatch, start, end):
     response = client.get('/trip', params={'user_id': 'walker', 'start_time': start, 'end_time': end})
     assert 'Unable to load trip' in response.text
     fetch.assert_not_called()
+
+
+def test_trip_alerts_pagination_metadata_and_escaping(client, monkeypatch):
+    from urllib.parse import parse_qs, urlparse
+    rows = [{'id': i, 'created_at': '2026-10-01T12:00:00Z', 'decision': 'sent' if i % 2 else 'suppressed',
+             'name': '<script>bad()</script>', 'suppressed_reason': 'muted', 'source': 'radar',
+             'event_metadata': {'nested': {'enabled': False}}} for i in range(101)]
+    fetch = MagicMock(return_value=rows)
+    monkeypatch.setattr(routes, 'fetch_trip_alerts', fetch)
+    logs = MagicMock()
+    monkeypatch.setattr(routes, 'fetch_recent_logs', logs)
+    response = client.get('/trip', params={**PARAMS, 'tab': 'alerts', 'page': '2', 'log_type': ['upload', 'location']})
+    assert len(response.context['alerts']) == 100
+    assert fetch.call_args.kwargs['offset'] == 100
+    logs.assert_not_called()
+    assert 'sent' in response.text and 'suppressed' in response.text
+    assert '&lt;script&gt;bad()&lt;/script&gt;' in response.text
+    assert '<script>bad()</script>' not in response.text
+    assert '"enabled": false' in response.text
+    for key, page in [('newer_url', '1'), ('older_url', '3')]:
+        params = parse_qs(urlparse(response.context[key]).query)
+        assert params['tab'] == ['alerts']
+        assert params.get('page', ['1']) == [page]
+        assert params['user_id'] == ['walker']
+        assert params['log_type'] == ['upload', 'location']
+    fetch.return_value = rows[:1]
+    assert client.get('/trip', params={**PARAMS, 'tab': 'alerts'}).context['older_url'] is None
+
+
+def test_trip_alerts_failure_and_invalid_bounds(client, monkeypatch):
+    fetch = MagicMock(side_effect=RuntimeError('Alert read unavailable'))
+    monkeypatch.setattr(routes, 'fetch_trip_alerts', fetch)
+    response = client.get('/trip', params={**PARAMS, 'tab': 'alerts'})
+    assert 'Alert read unavailable' in response.text
+    assert 'No alerts on this page' not in response.text
+    fetch.reset_mock()
+    client.get('/trip', params={**PARAMS, 'tab': 'alerts', 'start_time': 'bad', 'end_time': 'bad'})
+    fetch.assert_not_called()
+    client.post('/logout', follow_redirects=False)
+    assert client.get('/trip', params={**PARAMS, 'tab': 'alerts'}).status_code == 401
+    fetch.assert_not_called()
+
+
+def test_alert_query_uses_user_time_bounds_and_stable_pagination(monkeypatch):
+    from types import SimpleNamespace
+    from app import supabase_client
+    query = MagicMock()
+    for method in ('select', 'eq', 'gte', 'lt', 'order', 'range'):
+        getattr(query, method).return_value = query
+    query.execute.return_value = SimpleNamespace(data=[{'id': 1}])
+    db = MagicMock()
+    db.table.return_value = query
+    monkeypatch.setattr(supabase_client, 'get_supabase_client', lambda: db)
+    assert supabase_client.fetch_trip_alerts('walker', 'start', 'end', offset=100) == [{'id': 1}]
+    db.table.assert_called_once_with('alerts')
+    query.eq.assert_called_once_with('user_id', 'walker')
+    query.gte.assert_called_once_with('created_at', 'start')
+    query.lt.assert_called_once_with('created_at', 'end')
+    query.range.assert_called_once_with(100, 200)
+    assert query.order.call_args_list[0].args == ('created_at',)
+    assert query.order.call_args_list[1].args == ('id',)
+    assert 'event_metadata' in query.select.call_args.args[0]
+
+
+def test_trip_scope_filter_and_navigation(client, monkeypatch):
+    from urllib.parse import parse_qs, urlparse
+    fetch = MagicMock(return_value=[{'alert_scope': 'location'}] * 101)
+    monkeypatch.setattr(routes, 'fetch_trip_alerts', fetch)
+    response = client.get('/trip', params={**PARAMS, 'tab': 'alerts', 'page': 2,
+                                         'alert_scope': ['location', 'jurisdiction', 'location']})
+    assert fetch.call_args.kwargs['scopes'] == ['location', 'jurisdiction']
+    assert 'value="jurisdiction" checked' in response.text
+    for url in [*response.context['tab_urls'].values(), response.context['older_url'], response.context['newer_url']]:
+        assert parse_qs(urlparse(url).query)['alert_scope'] == ['location', 'jurisdiction']
+    fetch.return_value = []
+    client.get('/trip', params={**PARAMS, 'tab': 'alerts', 'alert_scope': ''})
+    assert fetch.call_args.kwargs['scopes'] is None
+    monkeypatch.setattr(routes, 'fetch_recent_logs', lambda **kwargs: [])
+    response = client.get('/trip', params={**PARAMS, 'tab': 'logs', 'alert_scope': 'location'})
+    assert 'type="hidden" name="alert_scope" value="location"' in response.text
+
+
+def test_trip_scope_options_failure_keeps_selection(client, monkeypatch):
+    monkeypatch.setattr(routes, 'fetch_scoreboard_alert_scopes', MagicMock(side_effect=RuntimeError('Unavailable')))
+    monkeypatch.setattr(routes, 'fetch_trip_alerts', lambda **kwargs: [])
+    response = client.get('/trip', params={**PARAMS, 'tab': 'alerts', 'alert_scope': 'location'})
+    assert 'value="location" checked' in response.text
+    assert 'Some filter choices could not be loaded' in response.text
+
+
+def test_alert_query_scope_union(monkeypatch):
+    from types import SimpleNamespace
+    from app import supabase_client
+    query = MagicMock()
+    for method in ('select', 'eq', 'gte', 'lt', 'order', 'range', 'in_'):
+        getattr(query, method).return_value = query
+    query.execute.return_value = SimpleNamespace(data=[])
+    db = MagicMock()
+    db.table.return_value = query
+    monkeypatch.setattr(supabase_client, 'get_supabase_client', lambda: db)
+    supabase_client.fetch_trip_alerts('walker', 'start', 'end', scopes=['location', 'jurisdiction'])
+    query.in_.assert_called_once_with('alert_scope', ['location', 'jurisdiction'])
+    query.in_.reset_mock()
+    supabase_client.fetch_trip_alerts('walker', 'start', 'end')
+    query.in_.assert_not_called()

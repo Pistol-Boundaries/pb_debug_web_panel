@@ -56,6 +56,33 @@ def fetch_recent_logs(
     return response.data or []
 
 
+def fetch_trip_alerts(
+    user_id: str,
+    start_at: str,
+    end_before: str,
+    limit: int = 101,
+    offset: int = 0,
+    scopes: list[str] | None = None,
+) -> list[dict[str, Any]]:
+    """Include every decision, scoped to one user's trip by alert creation time."""
+    query = (
+        get_supabase_client().table("alerts")
+        .select("id, created_at, user_id, name, address, location_id, jurisdiction_id, "
+                "alert_scope, type, status, decision, suppressed_reason, source, "
+                "read_status, confidence, accuracy, step, version, radar_id, "
+                "radar_created_at, alert_helpful, alert_issue, feedback_notes, event_metadata")
+        .eq("user_id", user_id)
+        .gte("created_at", start_at)
+        .lt("created_at", end_before)
+        .order("created_at", desc=True)
+        .order("id", desc=True)
+        .range(offset, offset + limit - 1)
+    )
+    if scopes:
+        query = query.in_("alert_scope", scopes)
+    return query.execute().data or []
+
+
 def fetch_scoreboard_alert_breakdown(
     from_at: str | None = None,
     to_before: str | None = None,

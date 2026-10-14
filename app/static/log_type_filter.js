@@ -1,13 +1,14 @@
 (() => {
-  if (!document.getElementById("log-type-summary")) return;
-      const typeCheckboxes = [...document.querySelectorAll('input[name="log_type"]')];
-      function updateTypeSummary() {
-        const count = typeCheckboxes.filter(input => input.checked).length;
-        document.getElementById("log-type-summary").textContent = count ? `${count} selected` : "All log types";
-      }
-      typeCheckboxes.forEach(input => input.addEventListener("change", updateTypeSummary));
-      document.getElementById("clear-log-types").addEventListener("click", () => {
-        typeCheckboxes.forEach(input => { input.checked = false; });
-        updateTypeSummary();
-      });
+  document.querySelectorAll('[data-multiselect]').forEach(picker => {
+    const checkboxes = [...picker.querySelectorAll('input[type="checkbox"]')];
+    const updateSummary = () => {
+      const count = checkboxes.filter(input => input.checked).length;
+      picker.querySelector('summary').textContent = count ? `${count} selected` : picker.dataset.emptyLabel;
+    };
+    checkboxes.forEach(input => input.addEventListener('change', updateSummary));
+    picker.querySelector('[data-clear-selection]').addEventListener('click', () => {
+      checkboxes.forEach(input => { input.checked = false; });
+      updateSummary();
+    });
+  });
 })();
