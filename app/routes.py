@@ -4,11 +4,12 @@ from urllib.parse import urlencode
 from typing import Any
 
 from fastapi import APIRouter, Form, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from app.config import get_settings
 from app.supabase_client import (
+    count_trip_rows_after,
     fetch_recent_logs,
     fetch_trip_alerts,
     fetch_filter_options,
@@ -432,6 +433,33 @@ async def trip_view(request: Request) -> HTMLResponse:
         "newer_url": trip_url(tab, page - 1) if page > 1 else None,
         "older_url": trip_url(tab, page + 1) if has_older else None,
     })
+
+
+@router.get("/trip/new-count")
+async def trip_new_count(request: Request) -> JSONResponse:
+    """Polled by the trip page (every 30s, visible tab only) to offer
+    a "Show latest" pill instead of auto-reloading."""
+    if not _is_authenticated(request):
+        return JSONResponse({"error": "Not signed in."}, status_code=401)
+    params = request.query_params
+    user_id = params.get("user_id", "").strip()
+    tab = params.get("tab", "map")
+    try:
+        after = datetime.fromisoformat(params.get("after", "").strip().replace("Z", "+00:00"))
+    except ValueError:
+        after = None
+    if not user_id or after is None or tab not in ("map", "logs", "alerts"):
+        return JSONResponse({"error": "Provide user_id, after and tab."}, status_code=400)
+    if after.tzinfo is None:
+        after = after.replace(tzinfo=timezone.utc)
+    count = count_trip_rows_after(
+        user_id=user_id,
+        after=after.astimezone(timezone.utc).isoformat(),
+        tab=tab,
+        log_types=[v.strip() for v in params.getlist("log_type") if v.strip()] or None,
+        scopes=[v.strip() for v in params.getlist("alert_scope") if v.strip()] or None,
+    )
+    return JSONResponse({"count": count})
 
 
 def _breakdown_tone(row: dict[str, Any]) -> str:

@@ -83,6 +83,39 @@ def fetch_trip_alerts(
     return query.execute().data or []
 
 
+def count_trip_rows_after(
+    user_id: str,
+    after: str,
+    tab: str,
+    log_types: list[str] | None = None,
+    scopes: list[str] | None = None,
+) -> int:
+    """Trip viewer new-data pill: rows the current tab would show that are
+    newer than its window (``after`` is the window's exclusive end)."""
+    client = get_supabase_client()
+    if tab == "alerts":
+        query = (
+            client.table("alerts")
+            .select("id", count="exact", head=True)
+            .eq("user_id", user_id)
+            .gte("created_at", after)
+        )
+        if scopes:
+            query = query.in_("alert_scope", scopes)
+    else:
+        query = (
+            client.table(get_settings().supabase_logs_table)
+            .select("id", count="exact", head=True)
+            .eq("user_id", user_id)
+            .gte("occurred_at", after)
+        )
+        if tab == "map":
+            query = query.not_.is_("lat", "null").not_.is_("lng", "null")
+        elif log_types:
+            query = query.in_("type", log_types)
+    return query.execute().count or 0
+
+
 def fetch_scoreboard_alert_breakdown(
     from_at: str | None = None,
     to_before: str | None = None,

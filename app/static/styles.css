@@ -713,6 +713,17 @@ tbody tr:nth-child(even) {
 .trip-tabs span, .trip-badge { font-size: .75rem; background: #ece5d8; border-radius: 999px; padding: .25rem .5rem; margin-left: .5rem; white-space: nowrap; }
 .trip-context { display: flex; flex-wrap: wrap; gap: .5rem 1.5rem; padding: 1rem 1.5rem; background: var(--accent-wash); overflow-wrap: anywhere; }
 .trip-context span { color: var(--muted); }
+.new-data-pill { margin-left: auto; padding: .3rem .85rem; border: 0; border-radius: 999px; background: var(--accent); color: #fffdf9; font: inherit; font-weight: 600; cursor: pointer;
+  opacity: 0; transform: translateY(-4px) scale(.96); transition: opacity .35s ease, transform .35s ease; }
+.new-data-pill[hidden] { display: none; }
+.new-data-pill.is-visible { opacity: 1; transform: none; }
+/* One ripple on arrival, then again every 15s while the pill is up. */
+.new-data-pill.is-visible { animation: new-data-pulse 15s ease-out .35s infinite; }
+@keyframes new-data-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(179, 101, 42, .55); }
+  8%, 100% { box-shadow: 0 0 0 14px rgba(179, 101, 42, 0); }
+}
+@media (prefers-reduced-motion: reduce) { .new-data-pill { transition: none; } .new-data-pill.is-visible { animation: none; } }
 .trip-map-heading { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 1.25rem 1.5rem 0; }
 .trip-map-heading h2 { margin: 0; font-size: 1.25rem; }
 .trip-map-heading p { margin: .4rem 0; color: var(--muted); }

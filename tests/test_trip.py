@@ -268,3 +268,53 @@ def test_trip_reset_keeps_user_and_tab(client, monkeypatch):
     assert 'href="/trip?user_id=walker&amp;tab=logs" class="secondary-button secondary-link">Reset to last 3 hours' in response.text
     response = client.get('/trip')
     assert 'href="/trip?tab=map" class="secondary-button secondary-link">Reset to last 3 hours' in response.text
+
+
+def test_trip_new_count_endpoint(client, monkeypatch):
+    count = MagicMock(return_value=7)
+    monkeypatch.setattr(routes, 'count_trip_rows_after', count)
+    response = client.get('/trip/new-count', params={
+        'user_id': 'walker', 'tab': 'logs', 'after': '2026-10-27T16:00:00Z', 'log_type': ['upload', ' ']})
+    assert response.json() == {'count': 7}
+    count.assert_called_once_with(user_id='walker', after='2026-10-27T16:00:00+00:00', tab='logs',
+                                  log_types=['upload'], scopes=None)
+    for bad in ({'tab': 'map', 'after': 'nope'}, {'tab': 'nope', 'after': '2026-10-27T16:00:00Z'}):
+        assert client.get('/trip/new-count', params={'user_id': 'walker', **bad}).status_code == 400
+    client.post('/logout', follow_redirects=False)
+    assert client.get('/trip/new-count', params={'user_id': 'walker'}).status_code == 401
+    assert count.call_count == 1
+
+
+def test_trip_renders_new_data_pill_hidden(client, monkeypatch):
+    monkeypatch.setattr(routes, 'fetch_recent_logs', lambda **kwargs: [])
+    response = client.get('/trip', params={**PARAMS, 'tab': 'logs'})
+    assert 'id="trip-new-data"' in response.text
+    assert 'data-user="walker" data-tab="logs" hidden' in response.text
+
+
+@pytest.mark.parametrize('tab,table,column', [('map', 'activity_logs', 'occurred_at'),
+                                              ('logs', 'activity_logs', 'occurred_at'),
+                                              ('alerts', 'alerts', 'created_at')])
+def test_new_count_query_per_tab(monkeypatch, tab, table, column):
+    from types import SimpleNamespace
+    from app import supabase_client
+    query = MagicMock()
+    for method in ('select', 'eq', 'gte', 'in_', 'is_'):
+        getattr(query, method).return_value = query
+    query.not_ = query
+    query.execute.return_value = SimpleNamespace(count=3)
+    db = MagicMock()
+    db.table.return_value = query
+    monkeypatch.setattr(supabase_client, 'get_supabase_client', lambda: db)
+    monkeypatch.setattr(supabase_client, 'get_settings', lambda: SimpleNamespace(supabase_logs_table='activity_logs'))
+    assert supabase_client.count_trip_rows_after('walker', 'after', tab, log_types=['upload'], scopes=['location']) == 3
+    db.table.assert_called_once_with(table)
+    query.select.assert_called_once_with('id', count='exact', head=True)
+    query.gte.assert_called_once_with(column, 'after')
+    if tab == 'map':
+        query.in_.assert_not_called()
+        assert query.is_.call_count == 2
+    elif tab == 'logs':
+        query.in_.assert_called_once_with('type', ['upload'])
+    else:
+        query.in_.assert_called_once_with('alert_scope', ['location'])
