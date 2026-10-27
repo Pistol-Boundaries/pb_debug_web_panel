@@ -57,7 +57,7 @@
   {% elif not ready %}
     <div class="trip-empty"><h2>Start with a user and date range</h2><p>Explore their locations, review activity logs, and keep the same trip selected as you switch views.</p></div>
   {% else %}
-    <div class="trip-context"><strong>{{ filters.user_id }}</strong><span><time data-time="{{ filters.start_time }}">{{ filters.start_time }}</time> → <time data-time="{{ filters.end_time }}">{{ filters.end_time }}</time> · End exclusive</span></div>
+    <div class="trip-context"><strong>{{ filters.user_id }}</strong><span><time data-time="{{ filters.start_time }}">{{ filters.start_time }}</time> → <time data-time="{{ filters.end_time }}">{{ filters.end_time }}</time> · End exclusive</span><button type="button" id="trip-new-data" class="new-data-pill" data-user="{{ filters.user_id }}" data-tab="{{ tab }}" hidden></button></div>
     {% if tab == 'map' %}
       {% if truncated %}<p class="alert">Showing the latest 5,000 locations. Narrow the date range to see every location in a smaller interval.</p>{% endif %}
       {% if points %}
@@ -107,5 +107,5 @@
 <script src="/static/log_type_filter.js?v=20261014-scopes"></script>
 <script id="trip-points" type="application/json">{{ points | tojson }}</script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
-<script src="/static/trip.js?v=20261027-localtime"></script>
+<script src="/static/trip.js?v=20261027-newdata"></script>
 {% endblock %}

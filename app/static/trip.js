@@ -24,6 +24,45 @@
         });
       });
 
+  // New-data pill: only for windows reaching (about) now, polled every 30s
+  // while the tab is visible. Nothing reloads by itself; the pill
+  // keeps the chosen start and moves the end to now.
+  const pill = document.getElementById('trip-new-data');
+  const endRaw = document.getElementById('end_time_utc').value;
+  if (pill && endRaw && Date.now() - parseTimestamp(endRaw).getTime() < 10 * 60 * 1000) {
+    const POLL_MS = 30 * 1000;
+    const nouns = {map: 'point', logs: 'log', alerts: 'alert'};
+    const current = new URLSearchParams(location.search);
+    let lastCheck = 0;
+    const check = async () => {
+      if (document.hidden) return;
+      lastCheck = Date.now();
+      const params = new URLSearchParams({user_id: pill.dataset.user, tab: pill.dataset.tab, after: endRaw});
+      ['log_type', 'alert_scope'].forEach(name => current.getAll(name).forEach(v => params.append(name, v)));
+      try {
+        const response = await fetch(`/trip/new-count?${params}`, {credentials: 'same-origin'});
+        if (!response.ok) return;
+        const {count} = await response.json();
+        if (!count) return;
+        const noun = nouns[pill.dataset.tab] || 'item';
+        pill.textContent = `↻ ${count > 999 ? '999+' : count} new ${noun}${count === 1 ? '' : 's'} · Show latest`;
+        if (pill.hidden) { pill.hidden = false; pill.classList.add('pulse'); }
+      } catch (_) { /* offline or signed out: try again next poll */ }
+    };
+    setInterval(check, POLL_MS);
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden && Date.now() - lastCheck >= POLL_MS) check();
+    });
+    pill.addEventListener('click', () => {
+      ['page', 'start_date', 'end_date'].forEach(name => current.delete(name));
+      current.set('user_id', pill.dataset.user);
+      current.set('tab', pill.dataset.tab);
+      current.set('start_time', document.getElementById('start_time_utc').value);
+      current.set('end_time', new Date().toISOString());
+      location.href = `/trip?${current}`;
+    });
+  }
+
   // Browser-local time with its zone label; UTC rides along on hover
   // (and in map popups). The raw records stay UTC.
   const formatTime = (raw, timeZone) => {
