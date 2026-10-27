@@ -44,7 +44,7 @@
       </details>
     </div>
     {% endif %}
-    <div class="filter-actions"><button type="submit">Apply Filters</button><a href="/trip" class="secondary-button secondary-link">Reset to last 3 hours</a></div>
+    <div class="filter-actions"><button type="submit">Apply Filters</button><a href="/trip?{{ ({'user_id': filters.user_id, 'tab': tab} if filters.user_id else {'tab': tab}) | urlencode }}" class="secondary-button secondary-link">Reset to last 3 hours</a></div>
   </form>
   {% if options_warning %}<p class="empty-state">{{ options_warning }}</p>{% endif %}
   <nav class="trip-tabs" aria-label="Trip views">
@@ -62,7 +62,7 @@
       {% if truncated %}<p class="alert">Showing the latest 5,000 locations. Narrow the date range to see every location in a smaller interval.</p>{% endif %}
       {% if points %}
       <div class="trip-map-heading"><div><h2>{{ points | length }} locations</h2><p>Oldest to newest · Select a location to inspect it. Lines connect points within each session.</p></div><button id="trip-fit" type="button" class="secondary-button">Fit all locations</button></div>
-      <p class="map-legend">Blue: location · Orange: beacon · Red: beacon stop · All times UTC</p>
+      <p class="map-legend">Blue: location · Orange: beacon · Red: beacon stop · Times in your browser timezone (hover for UTC)</p>
       <div class="trip-map-layout">
         <div id="trip-map" aria-label="Trip locations map"></div>
         <aside class="trip-locations" aria-label="Locations in time order"><ol>
@@ -71,9 +71,9 @@
       </div>
       {% else %}<div class="trip-empty"><h2>No locations in this range</h2><p>Try another date range, or check Logs for activity without coordinates.</p></div>{% endif %}
     {% elif tab == 'logs' %}
-      <div class="trip-map-heading"><div><h2>Trip activity</h2><p>Newest first · All times UTC · Expand details to inspect the full record.</p></div><span>Page {{ page }}</span></div>
+      <div class="trip-map-heading"><div><h2>Trip activity</h2><p>Newest first · Times in your browser timezone (hover for UTC) · Expand details to inspect the full record (raw values are UTC).</p></div><span>Page {{ page }}</span></div>
       {% if logs %}
-      <div class="table-wrap"><table><thead><tr><th scope="col">Occurred (UTC)</th><th scope="col">Type</th><th scope="col">Event</th><th scope="col">Platform</th><th scope="col">Details</th></tr></thead><tbody>
+      <div class="table-wrap"><table><thead><tr><th scope="col">Occurred</th><th scope="col">Type</th><th scope="col">Event</th><th scope="col">Platform</th><th scope="col">Details</th></tr></thead><tbody>
       {% for log in logs %}<tr>
         <td><time data-time="{{ log.occurred_at or '' }}">{{ log.occurred_at or '—' }}</time></td><td>{{ log.type or '—' }}</td>
         <td><strong>{{ log.label or '—' }}</strong>{% if log.note %}<p>{{ log.note }}</p>{% endif %}</td><td>{{ log.platform or '—' }}</td>
@@ -83,10 +83,10 @@
       {% else %}<div class="trip-empty"><h2>No logs on this page</h2><p>Try another date range or log type selection{% if newer_url %} or return to newer logs{% endif %}.</p></div>{% endif %}
       <nav class="trip-pagination" aria-label="Log pages">{% if newer_url %}<a class="secondary-button secondary-link" href="{{ newer_url }}">← Newer logs</a>{% endif %}{% if older_url %}<a class="secondary-button secondary-link" href="{{ older_url }}">Older logs →</a>{% endif %}</nav>
     {% else %}
-      <div class="trip-map-heading"><div><h2>Trip alerts</h2><p>Sent and suppressed records · Newest first · Filtered by creation time (UTC).</p></div><span>Page {{ page }} · {{ alerts | length }} alerts</span></div>
+      <div class="trip-map-heading"><div><h2>Trip alerts</h2><p>Sent and suppressed records · Newest first · Times in your browser timezone (hover for UTC).</p></div><span>Page {{ page }} · {{ alerts | length }} alerts</span></div>
       {% if alerts %}
       <div class="table-wrap"><table>
-        <thead><tr><th scope="col">Created (UTC)</th><th scope="col">Place</th><th scope="col">Scope / type</th><th scope="col">Decision</th><th scope="col">Source</th><th scope="col">Feedback</th><th scope="col">Details</th></tr></thead>
+        <thead><tr><th scope="col">Created</th><th scope="col">Place</th><th scope="col">Scope / type</th><th scope="col">Decision</th><th scope="col">Source</th><th scope="col">Feedback</th><th scope="col">Details</th></tr></thead>
         <tbody>{% for alert in alerts %}<tr>
           <td><time data-time="{{ alert.created_at or '' }}">{{ alert.created_at or '—' }}</time></td>
           <td><strong>{{ alert.name or alert.jurisdiction_id or alert.location_id or '—' }}</strong>{% if alert.address %}<p>{{ alert.address }}</p>{% endif %}</td>
@@ -107,5 +107,5 @@
 <script src="/static/log_type_filter.js?v=20261014-scopes"></script>
 <script id="trip-points" type="application/json">{{ points | tojson }}</script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
-<script src="/static/trip.js?v=20261014-times"></script>
+<script src="/static/trip.js?v=20261027-localtime"></script>
 {% endblock %}
