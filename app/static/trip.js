@@ -24,15 +24,20 @@
         });
       });
 
-  const formatTime = (raw) => {
+  // Browser-local time with its zone label; UTC rides along on hover
+  // (and in map popups). The raw records stay UTC.
+  const formatTime = (raw, timeZone) => {
     if (!raw) return '—';
     let value = raw.replace(' ', 'T');
     if (/[+-]\d{2}$/.test(value)) value += ':00';
     if (!/(Z|[+-]\d{2}:?\d{2})$/i.test(value)) value += 'Z';
     const date = new Date(value);
-    return Number.isNaN(date.getTime()) ? raw : date.toLocaleString(undefined, {timeZone: 'UTC', timeZoneName: 'short'});
+    return Number.isNaN(date.getTime()) ? raw : date.toLocaleString(undefined, {timeZone, timeZoneName: 'short'});
   };
-  document.querySelectorAll('[data-time]').forEach(el => { el.textContent = formatTime(el.dataset.time); });
+  document.querySelectorAll('[data-time]').forEach(el => {
+    el.textContent = formatTime(el.dataset.time);
+    if (el.dataset.time) el.title = formatTime(el.dataset.time, 'UTC');
+  });
   const canvas = document.getElementById('trip-map');
   if (!canvas) return;
   if (typeof L === 'undefined') {
@@ -55,7 +60,7 @@
   tracks.forEach(track => { if (track.length > 1) L.polyline(track, {color: '#2e6fbb', weight: 3}).addTo(map); });
   const markers = points.map((p, index) => {
     const popup = document.createElement('div');
-    [`${index + 1}. ${p.label || p.type || 'Location'}`, formatTime(p.occurred_at), p.note,
+    [`${index + 1}. ${p.label || p.type || 'Location'}`, formatTime(p.occurred_at), formatTime(p.occurred_at, 'UTC'), p.note,
       `${p.lat}, ${p.lng}`, `Platform: ${p.platform || 'unknown'}`, `Motion: ${p.motion_state || 'unknown'}`].filter(Boolean).forEach(text => {
       const line = document.createElement('div'); line.textContent = text; popup.appendChild(line);
     });

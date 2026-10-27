@@ -260,3 +260,11 @@ def test_alert_query_scope_union(monkeypatch):
     query.in_.reset_mock()
     supabase_client.fetch_trip_alerts('walker', 'start', 'end')
     query.in_.assert_not_called()
+
+
+def test_trip_reset_keeps_user_and_tab(client, monkeypatch):
+    monkeypatch.setattr(routes, 'fetch_recent_logs', MagicMock(return_value=[]))
+    response = client.get('/trip', params={**PARAMS, 'tab': 'logs'})
+    assert 'href="/trip?user_id=walker&amp;tab=logs" class="secondary-button secondary-link">Reset to last 3 hours' in response.text
+    response = client.get('/trip')
+    assert 'href="/trip?tab=map" class="secondary-button secondary-link">Reset to last 3 hours' in response.text
