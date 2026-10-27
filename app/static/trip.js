@@ -46,7 +46,11 @@
         if (!count) return;
         const noun = nouns[pill.dataset.tab] || 'item';
         pill.textContent = `↻ ${count > 999 ? '999+' : count} new ${noun}${count === 1 ? '' : 's'} · Show latest`;
-        if (pill.hidden) { pill.hidden = false; pill.classList.add('pulse'); }
+        if (pill.hidden) {
+          pill.hidden = false;
+          // Next frame, so the fade-in transition runs from the hidden state.
+          requestAnimationFrame(() => requestAnimationFrame(() => pill.classList.add('is-visible')));
+        }
       } catch (_) { /* offline or signed out: try again next poll */ }
     };
     setInterval(check, POLL_MS);
@@ -59,7 +63,11 @@
       current.set('tab', pill.dataset.tab);
       current.set('start_time', document.getElementById('start_time_utc').value);
       current.set('end_time', new Date().toISOString());
-      location.href = `/trip?${current}`;
+      // Fade out first; navigate once it's gone (or right away without motion).
+      pill.classList.remove('is-visible');
+      const go = () => { location.href = `/trip?${current}`; };
+      if (matchMedia('(prefers-reduced-motion: reduce)').matches) go();
+      else setTimeout(go, 350);
     });
   }
 
