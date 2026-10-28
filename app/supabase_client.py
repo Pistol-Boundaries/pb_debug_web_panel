@@ -64,13 +64,17 @@ def fetch_trip_alerts(
     offset: int = 0,
     scopes: list[str] | None = None,
 ) -> list[dict[str, Any]]:
-    """Include every decision, scoped to one user's trip by alert creation time."""
+    """Include every decision, scoped to one user's trip by alert creation time.
+
+    alerts rows no longer store name/address (pb_backend #173), so they are
+    joined from locations/jurisdictions the same way query_alerts does."""
     query = (
         get_supabase_client().table("alerts")
-        .select("id, created_at, user_id, name, address, location_id, jurisdiction_id, "
+        .select("id, created_at, user_id, location_id, jurisdiction_id, "
                 "alert_scope, type, status, decision, suppressed_reason, source, "
                 "read_status, confidence, accuracy, step, version, radar_id, "
-                "radar_created_at, alert_helpful, alert_issue, feedback_notes, event_metadata")
+                "radar_created_at, alert_helpful, alert_issue, feedback_notes, event_metadata, "
+                "locations(name, address), jurisdictions(name, type)")
         .eq("user_id", user_id)
         .gte("created_at", start_at)
         .lt("created_at", end_before)
@@ -80,7 +84,22 @@ def fetch_trip_alerts(
     )
     if scopes:
         query = query.in_("alert_scope", scopes)
-    return query.execute().data or []
+    return [_with_alert_place(row) for row in query.execute().data or []]
+
+
+def _with_alert_place(row: dict[str, Any]) -> dict[str, Any]:
+    """Mirror query_alerts: nudges get its fixed name, jurisdiction scopes put
+    the jurisdiction type in address, location scopes use the location."""
+    row = dict(row)
+    location = row.pop("locations", None) or {}
+    jurisdiction = row.pop("jurisdictions", None) or {}
+    if row.get("alert_scope") == "nudge":
+        row["name"], row["address"] = "Nearby places to tag", None
+    elif jurisdiction:
+        row["name"], row["address"] = jurisdiction.get("name"), jurisdiction.get("type")
+    else:
+        row["name"], row["address"] = location.get("name"), location.get("address")
+    return row
 
 
 def count_trip_rows_after(

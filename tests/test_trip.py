@@ -208,7 +208,7 @@ def test_alert_query_uses_user_time_bounds_and_stable_pagination(monkeypatch):
     db = MagicMock()
     db.table.return_value = query
     monkeypatch.setattr(supabase_client, 'get_supabase_client', lambda: db)
-    assert supabase_client.fetch_trip_alerts('walker', 'start', 'end', offset=100) == [{'id': 1}]
+    assert [row['id'] for row in supabase_client.fetch_trip_alerts('walker', 'start', 'end', offset=100)] == [1]
     db.table.assert_called_once_with('alerts')
     query.eq.assert_called_once_with('user_id', 'walker')
     query.gte.assert_called_once_with('created_at', 'start')
@@ -217,6 +217,30 @@ def test_alert_query_uses_user_time_bounds_and_stable_pagination(monkeypatch):
     assert query.order.call_args_list[0].args == ('created_at',)
     assert query.order.call_args_list[1].args == ('id',)
     assert 'event_metadata' in query.select.call_args.args[0]
+
+
+def test_alert_query_joins_place_names(monkeypatch):
+    from types import SimpleNamespace
+    from app import supabase_client
+    query = MagicMock()
+    for method in ('select', 'eq', 'gte', 'lt', 'order', 'range'):
+        getattr(query, method).return_value = query
+    query.execute.return_value = SimpleNamespace(data=[
+        {'id': 1, 'alert_scope': 'location', 'locations': {'name': 'Cafe', 'address': '1 Main St'}, 'jurisdictions': None},
+        {'id': 2, 'alert_scope': 'jurisdiction', 'locations': None, 'jurisdictions': {'name': 'Iowa', 'type': 'state'}},
+        {'id': 3, 'alert_scope': 'nudge', 'locations': None, 'jurisdictions': None},
+        {'id': 4, 'alert_scope': 'location', 'locations': None, 'jurisdictions': None},
+    ])
+    db = MagicMock()
+    db.table.return_value = query
+    monkeypatch.setattr(supabase_client, 'get_supabase_client', lambda: db)
+    rows = supabase_client.fetch_trip_alerts('walker', 'start', 'end')
+    columns = query.select.call_args.args[0]
+    assert 'locations(name, address)' in columns and 'jurisdictions(name, type)' in columns
+    assert ' name,' not in columns and ' address,' not in columns
+    assert [(r['name'], r['address']) for r in rows] == [
+        ('Cafe', '1 Main St'), ('Iowa', 'state'), ('Nearby places to tag', None), (None, None)]
+    assert all('locations' not in r and 'jurisdictions' not in r for r in rows)
 
 
 def test_trip_scope_filter_and_navigation(client, monkeypatch):
