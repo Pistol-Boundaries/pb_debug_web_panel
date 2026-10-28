@@ -38,7 +38,7 @@
       if (document.hidden) return;
       lastCheck = Date.now();
       const params = new URLSearchParams({user_id: pill.dataset.user, tab: pill.dataset.tab, after: endRaw});
-      ['log_type', 'alert_scope'].forEach(name => current.getAll(name).forEach(v => params.append(name, v)));
+      ['log_type', 'alert_scope', 'platform'].forEach(name => current.getAll(name).forEach(v => params.append(name, v)));
       try {
         const response = await fetch(`/trip/new-count?${params}`, {credentials: 'same-origin'});
         if (!response.ok) return;

@@ -277,7 +277,7 @@ def test_trip_new_count_endpoint(client, monkeypatch):
         'user_id': 'walker', 'tab': 'logs', 'after': '2026-10-27T16:00:00Z', 'log_type': ['upload', ' ']})
     assert response.json() == {'count': 7}
     count.assert_called_once_with(user_id='walker', after='2026-10-27T16:00:00+00:00', tab='logs',
-                                  log_types=['upload'], scopes=None)
+                                  log_types=['upload'], scopes=None, platform=None)
     for bad in ({'tab': 'map', 'after': 'nope'}, {'tab': 'nope', 'after': '2026-10-27T16:00:00Z'}):
         assert client.get('/trip/new-count', params={'user_id': 'walker', **bad}).status_code == 400
     client.post('/logout', follow_redirects=False)
@@ -307,10 +307,15 @@ def test_new_count_query_per_tab(monkeypatch, tab, table, column):
     db.table.return_value = query
     monkeypatch.setattr(supabase_client, 'get_supabase_client', lambda: db)
     monkeypatch.setattr(supabase_client, 'get_settings', lambda: SimpleNamespace(supabase_logs_table='activity_logs'))
-    assert supabase_client.count_trip_rows_after('walker', 'after', tab, log_types=['upload'], scopes=['location']) == 3
+    assert supabase_client.count_trip_rows_after('walker', 'after', tab, log_types=['upload'], scopes=['location'],
+                                                 platform='android') == 3
     db.table.assert_called_once_with(table)
     query.select.assert_called_once_with('id', count='exact', head=True)
     query.gte.assert_called_once_with(column, 'after')
+    if tab == 'alerts':
+        query.eq.assert_called_once_with('user_id', 'walker')
+    else:
+        assert query.eq.call_args_list[-1].args == ('platform', 'android')
     if tab == 'map':
         query.in_.assert_not_called()
         assert query.is_.call_count == 2
@@ -318,3 +323,38 @@ def test_new_count_query_per_tab(monkeypatch, tab, table, column):
         query.in_.assert_called_once_with('type', ['upload'])
     else:
         query.in_.assert_called_once_with('alert_scope', ['location'])
+
+
+def test_trip_platform_filter_map_logs_and_links(client, monkeypatch):
+    from urllib.parse import parse_qs, urlparse
+    fetch = MagicMock(return_value=[])
+    monkeypatch.setattr(routes, 'fetch_recent_logs', fetch)
+    response = client.get('/trip', params={**PARAMS, 'tab': 'logs', 'platform': 'android'})
+    assert fetch.call_args.kwargs['platform'] == 'android'
+    assert 'value="android" selected' in response.text
+    for url in response.context['tab_urls'].values():
+        assert parse_qs(urlparse(url).query)['platform'] == ['android']
+    assert 'platform=android' in response.text.split('Reset to last 3 hours')[0].rsplit('href=', 1)[1]
+    client.get('/trip', params=PARAMS)
+    assert 'platform' not in fetch.call_args.kwargs
+
+
+def test_trip_platform_filter_skips_alerts_and_rejects_unknown(client, monkeypatch):
+    alerts = MagicMock(return_value=[])
+    monkeypatch.setattr(routes, 'fetch_trip_alerts', alerts)
+    response = client.get('/trip', params={**PARAMS, 'tab': 'alerts', 'platform': 'ios'})
+    assert 'platform' not in alerts.call_args.kwargs
+    assert 'type="hidden" name="platform" value="ios"' in response.text
+    fetch = MagicMock()
+    monkeypatch.setattr(routes, 'fetch_recent_logs', fetch)
+    assert 'Invalid platform' in client.get('/trip', params={**PARAMS, 'platform': 'web'}).text
+    fetch.assert_not_called()
+
+
+def test_trip_new_count_passes_platform(client, monkeypatch):
+    count = MagicMock(return_value=2)
+    monkeypatch.setattr(routes, 'count_trip_rows_after', count)
+    params = {'user_id': 'walker', 'tab': 'map', 'after': '2026-10-28T10:00:00Z'}
+    assert client.get('/trip/new-count', params={**params, 'platform': 'ios'}).json() == {'count': 2}
+    assert count.call_args.kwargs['platform'] == 'ios'
+    assert client.get('/trip/new-count', params={**params, 'platform': 'web'}).status_code == 400

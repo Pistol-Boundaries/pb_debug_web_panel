@@ -322,6 +322,7 @@ async def trip_view(request: Request) -> HTMLResponse:
         exact_times = True
     log_types = list(dict.fromkeys(value.strip() for value in request.query_params.getlist("log_type") if value.strip()))
     alert_scopes = list(dict.fromkeys(value.strip() for value in request.query_params.getlist("alert_scope") if value.strip()))
+    platform = request.query_params.get("platform", "").strip()
     tab = request.query_params.get("tab", "map")
     if tab not in ("map", "logs", "alerts"):
         tab = "map"
@@ -334,6 +335,8 @@ async def trip_view(request: Request) -> HTMLResponse:
         if submitted:
             if not filters["user_id"]:
                 raise ValueError("Choose a user to view a trip.")
+            if platform and platform not in PLATFORMS:
+                raise ValueError("Invalid platform.")
             if exact_times:
                 if not filters["start_time"] or not filters["end_time"]:
                     raise ValueError("Enter both a start and end date and time.")
@@ -370,6 +373,9 @@ async def trip_view(request: Request) -> HTMLResponse:
                 start_at=start.isoformat(),
                 end_before=end.isoformat(),
             )
+            # Alerts rows carry no platform, so the filter applies to map + logs only.
+            if platform:
+                query["platform"] = platform
             if tab == "map":
                 rows = []
                 while len(rows) < 5001:
@@ -419,6 +425,8 @@ async def trip_view(request: Request) -> HTMLResponse:
         params = {**filters, "tab": target_tab} if submitted else {"tab": target_tab}
         params["log_type"] = log_types
         params["alert_scope"] = alert_scopes
+        if platform:
+            params["platform"] = platform
         if target_page != 1:
             params["page"] = str(target_page)
         return "/trip?" + urlencode(params, doseq=True)
@@ -429,6 +437,7 @@ async def trip_view(request: Request) -> HTMLResponse:
         "error_message": error_message, "options_warning": options_warning,
         "scope_options": scope_options, "selected_alert_scopes": alert_scopes,
         "user_options": user_options, "type_options": type_options, "selected_log_types": log_types, "page": page,
+        "platform": platform, "platform_options": [{"value": "ios", "label": "iOS"}, {"value": "android", "label": "Android"}],
         "tab_urls": {name: trip_url(name) for name in ("map", "logs", "alerts")},
         "newer_url": trip_url(tab, page - 1) if page > 1 else None,
         "older_url": trip_url(tab, page + 1) if has_older else None,
@@ -448,7 +457,8 @@ async def trip_new_count(request: Request) -> JSONResponse:
         after = datetime.fromisoformat(params.get("after", "").strip().replace("Z", "+00:00"))
     except ValueError:
         after = None
-    if not user_id or after is None or tab not in ("map", "logs", "alerts"):
+    platform = params.get("platform", "").strip()
+    if not user_id or after is None or tab not in ("map", "logs", "alerts") or (platform and platform not in PLATFORMS):
         return JSONResponse({"error": "Provide user_id, after and tab."}, status_code=400)
     if after.tzinfo is None:
         after = after.replace(tzinfo=timezone.utc)
@@ -458,6 +468,7 @@ async def trip_new_count(request: Request) -> JSONResponse:
         tab=tab,
         log_types=[v.strip() for v in params.getlist("log_type") if v.strip()] or None,
         scopes=[v.strip() for v in params.getlist("alert_scope") if v.strip()] or None,
+        platform=platform or None,
     )
     return JSONResponse({"count": count})
 

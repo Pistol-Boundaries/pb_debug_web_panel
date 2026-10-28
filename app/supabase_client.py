@@ -89,6 +89,7 @@ def count_trip_rows_after(
     tab: str,
     log_types: list[str] | None = None,
     scopes: list[str] | None = None,
+    platform: str | None = None,
 ) -> int:
     """Trip viewer new-data pill: rows the current tab would show that are
     newer than its window (``after`` is the window's exclusive end)."""
@@ -113,6 +114,8 @@ def count_trip_rows_after(
             query = query.not_.is_("lat", "null").not_.is_("lng", "null")
         elif log_types:
             query = query.in_("type", log_types)
+        if platform:
+            query = query.eq("platform", platform)
     return query.execute().count or 0
 
 

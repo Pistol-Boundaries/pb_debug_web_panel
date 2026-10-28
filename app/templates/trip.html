@@ -18,6 +18,7 @@
     <input type="hidden" name="tab" value="{{ tab }}" />
     {% if tab != "alerts" %}{% for value in selected_alert_scopes %}<input type="hidden" name="alert_scope" value="{{ value }}" />{% endfor %}{% endif %}
     {% if tab != "logs" %}{% for value in selected_log_types %}<input type="hidden" name="log_type" value="{{ value }}" />{% endfor %}{% endif %}
+    {% if tab == "alerts" and platform %}<input type="hidden" name="platform" value="{{ platform }}" />{% endif %}
     <div class="filter-field">
       <label for="trip-user">User</label>
       <select id="trip-user" name="user_id" required>
@@ -27,6 +28,15 @@
         {% endfor %}
       </select>
     </div>
+    {% if tab != "alerts" %}
+    <div class="filter-field">
+      <label for="trip-platform">Platform</label>
+      <select id="trip-platform" name="platform">
+        <option value="">All platforms</option>
+        {% for option in platform_options %}<option value="{{ option.value }}" {% if platform == option.value %}selected{% endif %}>{{ option.label }}</option>{% endfor %}
+      </select>
+    </div>
+    {% endif %}
     <div class="filter-field"><label for="start_time">Start time (local, inclusive)</label><input id="start_time" type="datetime-local" step="1" required /><input id="start_time_utc" name="start_time" type="hidden" value="{{ filters.start_time }}" /></div>
     <div class="filter-field"><label for="end_time">End time (local, exclusive)</label><input id="end_time" type="datetime-local" step="1" required /><input id="end_time_utc" name="end_time" type="hidden" value="{{ filters.end_time }}" /></div>
     {% if tab == "logs" %}<div class="filter-field">{% include "log_type_filter.html" %}</div>{% endif %}
@@ -44,7 +54,7 @@
       </details>
     </div>
     {% endif %}
-    <div class="filter-actions"><button type="submit">Apply Filters</button><a href="/trip?{{ ({'user_id': filters.user_id, 'tab': tab} if filters.user_id else {'tab': tab}) | urlencode }}" class="secondary-button secondary-link">Reset to last 3 hours</a></div>
+    <div class="filter-actions"><button type="submit">Apply Filters</button><a href="/trip?{{ dict(({'user_id': filters.user_id} if filters.user_id else {}), tab=tab, **({'platform': platform} if platform else {})) | urlencode }}" class="secondary-button secondary-link">Reset to last 3 hours</a></div>
   </form>
   {% if options_warning %}<p class="empty-state">{{ options_warning }}</p>{% endif %}
   <nav class="trip-tabs" aria-label="Trip views">
@@ -107,5 +117,5 @@
 <script src="/static/log_type_filter.js?v=20261014-scopes"></script>
 <script id="trip-points" type="application/json">{{ points | tojson }}</script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
-<script src="/static/trip.js?v=20261028-newdata2"></script>
+<script src="/static/trip.js?v=20261028-platform"></script>
 {% endblock %}
