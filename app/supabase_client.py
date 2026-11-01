@@ -291,3 +291,39 @@ def fetch_filter_options() -> dict[str, list[str]]:
         options[column] = sorted(values)
     _filter_options_cache = (monotonic() + 300, cache_key, options)
     return options
+
+
+# -----------------------------
+# PB-624 Data Quality Assessment Dashboard
+# Each wraps a dq_* SQL function in the dev project (apply via the Supabase
+# dashboard SQL editor; reference copy in pb_backend). Read-only.
+# -----------------------------
+def fetch_dq_locations_by_data_source() -> list[dict[str, Any]]:
+    """Location counts per data_source (dq_locations_by_data_source)."""
+    response = get_supabase_client().rpc("dq_locations_by_data_source").execute()
+    return response.data or []
+
+
+def fetch_dq_duplicate_place_ids() -> list[dict[str, Any]]:
+    """PB-653: place_ids shared by more than one location (dq_duplicate_place_ids)."""
+    response = get_supabase_client().rpc("dq_duplicate_place_ids").execute()
+    return response.data or []
+
+
+def fetch_dq_jurisdictions_without_topics() -> list[dict[str, Any]]:
+    """PB-654: jurisdictions with no jurisdiction_topics (dq_jurisdictions_without_topics)."""
+    response = get_supabase_client().rpc("dq_jurisdictions_without_topics").execute()
+    return response.data or []
+
+
+def fetch_dq_locations_with_parent_not_child() -> list[dict[str, Any]]:
+    """Locations with a parent_id that are not classified place_child
+    (dq_locations_with_parent_not_child)."""
+    response = get_supabase_client().rpc("dq_locations_with_parent_not_child").execute()
+    return response.data or []
+
+
+def fetch_dq_locations_by_status() -> list[dict[str, Any]]:
+    """Location counts per status and data_source (dq_locations_by_status)."""
+    response = get_supabase_client().rpc("dq_locations_by_status").execute()
+    return response.data or []
