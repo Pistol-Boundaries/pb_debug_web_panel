@@ -33,6 +33,9 @@ def _fake_fetches(monkeypatch, **overrides):
             {'place_id': 'ChIJabc', 'copies': 2, 'names': ['Lucky Break Saloon', 'Lucky Break Saloon'],
              'sources': ['Texas Bars', 'Texas Bars']},
         ],
+        'fetch_dq_jurisdictions_missing_geofence': lambda: [
+            {'id': '06999', 'name': 'Nowhere', 'type': 'county', 'parent_id': '06'},
+        ],
         'fetch_dq_jurisdictions_without_topics': lambda: [
             {'id': '06041', 'name': 'Marin', 'type': 'county', 'parent_id': '06'},
             {'id': '06073', 'name': 'San Diego', 'type': 'county', 'parent_id': '06'},
@@ -71,6 +74,12 @@ def test_layer_counts_append_unknown_types():
     labels = [layer['label'] for layer in layers]
     assert labels[:4] == ['Federal', 'States', 'Counties', 'Cities']
     assert 'Tribal' in labels and 'Unknown' in labels
+
+
+def test_layer_counts_can_leave_out_federal():
+    layers = routes._jurisdiction_layer_counts([{'type': 'county'}, {'type': 'federal'}], include_federal=False)
+    assert [layer['label'] for layer in layers] == ['States', 'Counties', 'Cities']
+    assert layers[1]['count'] == 1
 
 
 def test_join_values():
@@ -118,7 +127,11 @@ def test_each_tab_only_runs_its_own_checks(monkeypatch):
     def must_not_run():
         raise AssertionError('ran a check from the other tab')
 
-    _fake_fetches(monkeypatch, fetch_dq_jurisdictions_without_topics=must_not_run)
+    _fake_fetches(
+        monkeypatch,
+        fetch_dq_jurisdictions_without_topics=must_not_run,
+        fetch_dq_jurisdictions_missing_geofence=must_not_run,
+    )
     assert routes._data_quality_context('locations')['errors'] == {}
 
     _fake_fetches(
@@ -160,6 +173,8 @@ def test_jurisdictions_tab(client, monkeypatch):
     assert 'Jurisdictions without topics' in text
     assert 'Counties' in text and 'Federal' in text
     assert 'San Diego' in text                    # jurisdictions drill-down
+    assert 'Jurisdictions missing a geofence' in text
+    assert 'Nowhere' in text                      # missing geofence drill-down
     assert 'Duplicate place IDs' not in text
 
 
@@ -186,10 +201,13 @@ def test_empty_results(client, monkeypatch):
         monkeypatch,
         fetch_dq_duplicate_place_ids=lambda: [],
         fetch_dq_jurisdictions_without_topics=lambda: [],
+        fetch_dq_jurisdictions_missing_geofence=lambda: [],
         fetch_dq_locations_with_parent_not_child=lambda: [],
     )
     assert 'No duplicated place IDs.' in client.get('/data-quality').text
-    assert 'Every jurisdiction has topics.' in client.get('/data-quality?tab=jurisdictions').text
+    jurisdictions_text = client.get('/data-quality?tab=jurisdictions').text
+    assert 'Every jurisdiction has topics.' in jurisdictions_text
+    assert 'Every jurisdiction has a geofence.' in jurisdictions_text
 
 
 def test_requires_login(monkeypatch):

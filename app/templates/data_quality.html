@@ -73,6 +73,51 @@
       {% endif %}
     </div>
 
+    {# ---------- Missing geofence ---------- #}
+    <div class="chart-section">
+      <h2>Jurisdictions missing a geofence</h2>
+      <p class="chart-note">Jurisdictions with no <code>buffered_geofence</code>. Federal is left out because it has no shape by design; 0 is healthy.</p>
+      {% if errors.missing_geofence %}
+        <div class="alert alert-error"><strong>Unable to load jurisdictions missing a geofence.</strong><span>{{ errors.missing_geofence }}</span></div>
+      {% else %}
+        <div class="stat-tiles">
+          {% for layer in missing_geofence_layers %}
+            <div class="stat-tile">
+              <p class="stat-tile-label">{{ layer.label }}</p>
+              <p class="stat-tile-value">{{ "{:,}".format(layer.count) }}</p>
+            </div>
+          {% endfor %}
+        </div>
+        <details class="raw-data-toggle">
+          <summary>View the {{ "{:,}".format(missing_geofence_rows | length) }} jurisdictions missing a geofence</summary>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Name</th>
+                  <th>Type</th>
+                  <th>Parent ID</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for row in missing_geofence_rows %}
+                  <tr>
+                    <td><code>{{ row.id }}</code></td>
+                    <td>{{ row.name }}</td>
+                    <td>{{ row.type }}</td>
+                    <td><code>{{ row.parent_id }}</code></td>
+                  </tr>
+                {% else %}
+                  <tr><td colspan="4">Every jurisdiction has a geofence.</td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </details>
+      {% endif %}
+    </div>
+
     {% else %}
     {# ---------- Total locations ---------- #}
     <div class="chart-section">

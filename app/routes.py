@@ -22,6 +22,7 @@ from app.supabase_client import (
     fetch_scoreboard_missed_alert_classification,
     fetch_scoreboard_missed_alert_summary,
     fetch_dq_duplicate_place_ids,
+    fetch_dq_jurisdictions_missing_geofence,
     fetch_dq_jurisdictions_without_topics,
     fetch_dq_locations_by_data_source,
     fetch_dq_locations_by_status,
@@ -854,16 +855,23 @@ def _join_values(values: Any) -> str:
     return _display_value(values)
 
 
-def _jurisdiction_layer_counts(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Counts of jurisdictions without topics per layer, in hierarchy order,
-    with 0 for layers that have none. Unknown types are appended after."""
+def _jurisdiction_layer_counts(
+    rows: list[dict[str, Any]], include_federal: bool = True
+) -> list[dict[str, Any]]:
+    """Counts of jurisdictions per layer, in hierarchy order, with 0 for
+    layers that have none. Unknown types are appended after. Federal can be
+    left out for checks that don't apply to it."""
     counts: dict[str, int] = {}
     for row in rows:
         layer = row.get("type") or "unknown"
         counts[layer] = counts.get(layer, 0) + 1
 
     known = [key for key, _ in JURISDICTION_LAYERS]
-    layers = [{"label": label, "count": counts.get(key, 0)} for key, label in JURISDICTION_LAYERS]
+    layers = [
+        {"label": label, "count": counts.get(key, 0)}
+        for key, label in JURISDICTION_LAYERS
+        if include_federal or key != "federal"
+    ]
     layers.extend(
         {"label": str(key).capitalize(), "count": count}
         for key, count in sorted(counts.items())
@@ -938,8 +946,19 @@ def _data_quality_context(tab: str = "locations") -> dict[str, Any]:
 
     if tab == "jurisdictions":
         no_topics = load("no_topics", fetch_dq_jurisdictions_without_topics)
+        missing_geofence = load("missing_geofence", fetch_dq_jurisdictions_missing_geofence)
         context.update(
             {
+                "missing_geofence_layers": _jurisdiction_layer_counts(missing_geofence, include_federal=False),
+                "missing_geofence_rows": [
+                    {
+                        "id": _display_value(row.get("id")),
+                        "name": _display_value(row.get("name")),
+                        "type": _display_value(row.get("type")),
+                        "parent_id": _display_value(row.get("parent_id")),
+                    }
+                    for row in missing_geofence
+                ],
                 "no_topics_layers": _jurisdiction_layer_counts(no_topics),
                 "no_topics_rows": [
                     {
