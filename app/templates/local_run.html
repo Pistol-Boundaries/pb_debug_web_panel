@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Local Production Run{% endblock %}
+{% block extra_head %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+<link rel="stylesheet" href="/static/local_run.css" />
+{% endblock %}
+{% block content %}
+<section class="panel local-run-panel">
+  <header class="panel-header">
+    <div><h1>Local production run</h1><p>Review a TransistorSoft diagnostic log from a production test run.</p></div>
+    <div class="panel-actions">
+      <a href="/" class="secondary-button secondary-link">Activity logs</a>
+      <a href="/trip" class="secondary-button secondary-link">Trip Viewer</a>
+      <form method="post" action="/logout"><button class="secondary-button">Log out</button></form>
+    </div>
+  </header>
+  <div class="local-file-zone">
+    <label for="file"><strong>Choose a diagnostic log or drop it anywhere on this page</strong></label>
+    <input type="file" id="file" accept=".log,.txt,text/plain" aria-describedby="file-status" />
+    <p>Export from Field Diagnostics → Email TS Diagnostic Log. File contents stay in this browser and are not uploaded or saved.</p>
+    <p id="file-status" role="status" aria-live="polite">No file selected.</p>
+  </div>
+  <div class="local-controls">
+    <label for="day">Day (as logged) <select id="day"><option value="">No data</option></select></label>
+    <label><input type="checkbox" id="basemap"> Basemap</label>
+    <label><input type="checkbox" id="raws" checked> Raw fixes</label>
+    <span class="local-legend">Gray: raw · Blue: queued · Orange outline: motion change</span>
+  </div>
+  <p class="local-note">Enabling the basemap requests OpenStreetMap tiles for the viewed area. Leaflet loads from a CDN. Queued points indicate local database inserts, not confirmed uploads. Times use the log’s timezone.</p>
+  <div class="local-layout">
+    <div id="map" aria-label="Local run locations map"></div>
+    <aside id="side"><h2>Run statistics</h2><div id="stats"></div><h2>Events</h2><ul id="events"></ul></aside>
+  </div>
+</section>
+{% endblock %}
+{% block extra_scripts %}
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<script src="/static/local_run_parser.js"></script>
+<script src="/static/local_run.js"></script>
+{% endblock %}

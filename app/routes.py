@@ -851,3 +851,10 @@ async def login(request: Request, password: str = Form(...)) -> HTMLResponse:
 async def logout(request: Request) -> RedirectResponse:
     request.session.clear()
     return RedirectResponse(url="/", status_code=303)
+
+
+@router.get("/local-run", response_class=HTMLResponse)
+async def local_run(request: Request) -> HTMLResponse:
+    if not _is_authenticated(request):
+        return _login_response(request)
+    return templates.TemplateResponse(request, "local_run.html", {"request": request})

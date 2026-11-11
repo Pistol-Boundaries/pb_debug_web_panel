@@ -98,3 +98,21 @@ Deploy updates to the debug panel:
 This updates Cloud Run and only the `pb-debug-panel` Hosting site, preserving the
 existing server configuration. See [FIREBASE_DEPLOY.md](FIREBASE_DEPLOY.md) for
 CLI authentication and initial setup.
+
+## Local production run viewer
+
+Choose **Local run** in the panel navigation (`/local-run`), then select or drop a
+TransistorSoft diagnostic `.log` or `.txt` exported from Field Diagnostics → Email
+TS Diagnostic Log. Parsing stays in browser memory; no log data is sent to the
+server or saved. Select a day to inspect its trail, queued points, motion changes,
+HTTP results, and approximate distance (excluding gaps longer than five minutes).
+Timestamps are shown as logged; intermediate single-location samples are excluded.
+Queued points indicate database inserts, not proof of successful upload.
+
+The basemap starts disabled. Enabling it requests OpenStreetMap tiles for the
+viewed area; the Leaflet library and stylesheet load from a CDN even with the
+basemap disabled. This parser supports the iOS diagnostic text format shown in
+the supplied viewer, not arbitrary JSON exports or other diagnostic formats.
+
+Checks: `node --test tests/local_run_parser.test.cjs` and
+`.venv/bin/python -m pytest tests/test_local_run.py -q`.
