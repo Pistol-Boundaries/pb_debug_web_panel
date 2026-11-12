@@ -1,0 +1,316 @@
+{% extends "base.html" %}
+
+{% block title %}Data Quality{% endblock %}
+
+{% block content %}
+  <section class="panel">
+    <header class="panel-header">
+      <div>
+        <h1>Data Quality</h1>
+      </div>
+      <div class="panel-actions">
+        <a href="/" class="secondary-button secondary-link">Back to logs</a>
+        <a href="/scoreboard" class="secondary-button secondary-link">Scoreboard</a>
+        <a href="/trip" class="secondary-button secondary-link">Trip Viewer</a>
+        <a href="/map" class="secondary-button secondary-link">Recent map</a>
+        <a href="/permissions" class="secondary-button secondary-link">Permissions</a>
+        <form method="post" action="/logout">
+          <button type="submit" class="secondary-button">Log out</button>
+        </form>
+      </div>
+    </header>
+
+    <nav class="trip-tabs dq-tabs" aria-label="Data quality views">
+      {% for item in tabs %}
+        <a href="{{ item.url }}" {% if item.key == tab %}aria-current="page"{% endif %}>{{ item.label }}</a>
+      {% endfor %}
+    </nav>
+
+    {% if tab == "jurisdictions" %}
+
+    {# ---------- Jurisdictions without topics (PB-654) ---------- #}
+    <div class="chart-section">
+      <h2>Jurisdictions without topics</h2>
+      <p class="chart-note">Jurisdictions with no <code>jurisdiction_topics</code> rows, by layer. Every layer is shown so a 0 means it was checked.</p>
+      {% if errors.no_topics %}
+        <div class="alert alert-error"><strong>Unable to load jurisdictions without topics.</strong><span>{{ errors.no_topics }}</span></div>
+      {% else %}
+        <div class="stat-tiles">
+          {% for layer in no_topics_layers %}
+            <div class="stat-tile">
+              <p class="stat-tile-label">{{ layer.label }}</p>
+              <p class="stat-tile-value">{{ "{:,}".format(layer.count) }}</p>
+            </div>
+          {% endfor %}
+        </div>
+        <details class="raw-data-toggle">
+          <summary>View the {{ "{:,}".format(no_topics_rows | length) }} jurisdictions without topics</summary>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Name</th>
+                  <th>Type</th>
+                  <th>Parent ID</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for row in no_topics_rows %}
+                  <tr>
+                    <td><code>{{ row.id }}</code></td>
+                    <td>{{ row.name }}</td>
+                    <td>{{ row.type }}</td>
+                    <td><code>{{ row.parent_id }}</code></td>
+                  </tr>
+                {% else %}
+                  <tr><td colspan="4">Every jurisdiction has topics.</td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </details>
+      {% endif %}
+    </div>
+
+    {# ---------- Missing geofence ---------- #}
+    <div class="chart-section">
+      <h2>Jurisdictions missing a geofence</h2>
+      <p class="chart-note">Jurisdictions with no <code>buffered_geofence</code>. Federal is left out because it has no shape by design; 0 is healthy.</p>
+      {% if errors.missing_geofence %}
+        <div class="alert alert-error"><strong>Unable to load jurisdictions missing a geofence.</strong><span>{{ errors.missing_geofence }}</span></div>
+      {% else %}
+        <div class="stat-tiles">
+          {% for layer in missing_geofence_layers %}
+            <div class="stat-tile">
+              <p class="stat-tile-label">{{ layer.label }}</p>
+              <p class="stat-tile-value">{{ "{:,}".format(layer.count) }}</p>
+            </div>
+          {% endfor %}
+        </div>
+        <details class="raw-data-toggle">
+          <summary>View the {{ "{:,}".format(missing_geofence_rows | length) }} jurisdictions missing a geofence</summary>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Name</th>
+                  <th>Type</th>
+                  <th>Parent ID</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for row in missing_geofence_rows %}
+                  <tr>
+                    <td><code>{{ row.id }}</code></td>
+                    <td>{{ row.name }}</td>
+                    <td>{{ row.type }}</td>
+                    <td><code>{{ row.parent_id }}</code></td>
+                  </tr>
+                {% else %}
+                  <tr><td colspan="4">Every jurisdiction has a geofence.</td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </details>
+      {% endif %}
+    </div>
+
+    {% else %}
+    {# ---------- Total locations ---------- #}
+    <div class="chart-section">
+      <h2>Locations</h2>
+      <p class="chart-note">All rows in <code>locations</code>, broken down by the data source they were loaded from.</p>
+      {% if errors.locations %}
+        <div class="alert alert-error"><strong>Unable to load location counts.</strong><span>{{ errors.locations }}</span></div>
+      {% else %}
+        <div class="stat-tiles">
+          <div class="stat-tile">
+            <p class="stat-tile-label">Total locations</p>
+            <p class="stat-tile-value">{{ "{:,}".format(total_locations) }}</p>
+          </div>
+          <div class="stat-tile">
+            <p class="stat-tile-label">Data sources</p>
+            <p class="stat-tile-value">{{ "{:,}".format(locations_by_source | length) }}</p>
+          </div>
+        </div>
+        <details class="raw-data-toggle">
+          <summary>View locations by data source</summary>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Data source</th>
+                  <th>Locations</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for row in locations_by_source %}
+                  <tr>
+                    <td>{{ row.data_source }}</td>
+                    <td>{{ "{:,}".format(row.locations) }}</td>
+                  </tr>
+                {% else %}
+                  <tr><td colspan="2">No locations found.</td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </details>
+      {% endif %}
+    </div>
+
+    {# ---------- Locations by status ---------- #}
+    <div class="chart-section">
+      <h2>Locations by status</h2>
+      <p class="chart-note">How many locations have each carry status. A large <code>pending</code> count usually means an upload wasn't marked confirmed. Click a bar to see just that status by data source.</p>
+      {% if errors.status %}
+        <div class="alert alert-error"><strong>Unable to load location statuses.</strong><span>{{ errors.status }}</span></div>
+      {% else %}
+        <div class="bar-chart" id="status-chart">
+          {% for bar in status_bars %}
+            <div class="bar-row bar-row-clickable" data-status="{{ bar.label }}" role="button" tabindex="0" aria-pressed="false" aria-controls="status-details">
+              <span class="bar-row-label">{{ bar.label }}</span>
+              <div class="bar-track{{ ' tone-' + bar.tone if bar.tone != 'neutral' else '' }}">
+                <div
+                  class="bar-fill{{ ' tone-' + bar.tone if bar.tone != 'neutral' else '' }}"
+                  style="width: {{ bar.pct }}%"
+                  title="{{ bar.label }}: {{ '{:,}'.format(bar.count) }} locations"
+                ></div>
+              </div>
+              <span class="bar-value">{{ "{:,}".format(bar.count) }}</span>
+            </div>
+          {% else %}
+            <p class="empty-state">No locations found.</p>
+          {% endfor %}
+        </div>
+        <details class="raw-data-toggle" id="status-details">
+          <summary>View status by data source</summary>
+          <p class="dq-filter-note" id="status-filter-note" hidden>
+            Showing <strong data-status-name></strong> only.
+            <button type="button" class="link-button" id="status-show-all">Show all statuses</button>
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Status</th>
+                  <th>Data source</th>
+                  <th>Locations</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for row in status_rows %}
+                  <tr data-status="{{ row.status }}">
+                    <td>{{ row.status }}</td>
+                    <td>{{ row.data_source }}</td>
+                    <td>{{ "{:,}".format(row.locations) }}</td>
+                  </tr>
+                {% else %}
+                  <tr><td colspan="3">No locations found.</td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </details>
+      {% endif %}
+    </div>
+
+    {# ---------- Duplicate place IDs (PB-653) ---------- #}
+    <div class="chart-section">
+      <h2>Duplicate place IDs</h2>
+      <p class="chart-note">Google <code>place_id</code> values used by more than one location. Each place should appear once; 0 is healthy.</p>
+      {% if errors.duplicates %}
+        <div class="alert alert-error"><strong>Unable to load duplicate place IDs.</strong><span>{{ errors.duplicates }}</span></div>
+      {% else %}
+        <div class="stat-tiles">
+          <div class="stat-tile">
+            <p class="stat-tile-label">Duplicated place IDs</p>
+            <p class="stat-tile-value">{{ "{:,}".format(duplicate_count) }}</p>
+          </div>
+        </div>
+        <details class="raw-data-toggle">
+          <summary>View the {{ "{:,}".format(duplicate_count) }} duplicated place IDs</summary>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Place ID</th>
+                  <th>Copies</th>
+                  <th>Names</th>
+                  <th>Data sources</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for row in duplicate_rows %}
+                  <tr>
+                    <td><code>{{ row.place_id }}</code></td>
+                    <td>{{ row.copies }}</td>
+                    <td>{{ row.names }}</td>
+                    <td>{{ row.sources }}</td>
+                  </tr>
+                {% else %}
+                  <tr><td colspan="4">No duplicated place IDs.</td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </details>
+      {% endif %}
+    </div>
+
+    {# ---------- Locations with a parent that aren't place_child ---------- #}
+    <div class="chart-section">
+      <h2>Locations with a parent not marked as child</h2>
+      <p class="chart-note">Locations that have a <code>parent_id</code> but whose classification isn't <code>place_child</code>. These should become child locations; 0 is healthy.</p>
+      {% if errors.parent_not_child %}
+        <div class="alert alert-error"><strong>Unable to load locations with a parent.</strong><span>{{ errors.parent_not_child }}</span></div>
+      {% else %}
+        <div class="stat-tiles">
+          <div class="stat-tile">
+            <p class="stat-tile-label">Should be child locations</p>
+            <p class="stat-tile-value">{{ "{:,}".format(parent_not_child_count) }}</p>
+          </div>
+        </div>
+        <details class="raw-data-toggle">
+          <summary>View the {{ "{:,}".format(parent_not_child_count) }} locations</summary>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Location ID</th>
+                  <th>Name</th>
+                  <th>Classification</th>
+                  <th>Data source</th>
+                  <th>Parent</th>
+                  <th>Parent ID</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for row in parent_not_child_rows %}
+                  <tr>
+                    <td><code>{{ row.id }}</code></td>
+                    <td>{{ row.name }}</td>
+                    <td>{{ row.classification }}</td>
+                    <td>{{ row.data_source }}</td>
+                    <td>{{ row.parent_name }}</td>
+                    <td><code>{{ row.parent_id }}</code></td>
+                  </tr>
+                {% else %}
+                  <tr><td colspan="6">No locations with a parent outside place_child.</td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </details>
+      {% endif %}
+    </div>
+    {% endif %}
+  </section>
+{% endblock %}
+
+{% block extra_scripts %}
+  <script src="/static/data_quality.js?v=20261101-status-filter"></script>
+{% endblock %}

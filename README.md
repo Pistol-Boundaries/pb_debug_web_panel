@@ -22,6 +22,25 @@ read access to the new table. This change does not create tables or move old dat
 Run the viewer checks without contacting external services:
 `.venv/bin/python -m pytest tests/test_activity_logs.py -q`
 
+## Data Quality page
+
+`/data-quality` (PB-624) shows data quality checks on `locations` and
+`jurisdictions`. Each section calls a read-only `dq_*` database function that
+must exist in the Supabase project the panel points to (dev):
+
+- `dq_locations_by_data_source()` - total locations, by data source
+- `dq_duplicate_place_ids()` - place_ids used by more than one location (PB-653)
+- `dq_jurisdictions_without_topics()` - jurisdictions with no jurisdiction_topics (PB-654)
+- `dq_locations_with_parent_not_child()` - locations with a parent_id that aren't `place_child`
+- `dq_locations_by_status()` - location counts by status and data source
+- `dq_jurisdictions_missing_geofence()` - non-federal jurisdictions with no buffered geofence
+
+Apply new or changed functions in the Supabase dashboard SQL editor. Each
+check loads independently, so a missing function only errors its own section.
+
+Run its checks without contacting external services:
+`.venv/bin/python -m pytest tests/test_data_quality.py -q`
+
 ## Setup
 
 Project location:

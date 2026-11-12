@@ -21,6 +21,12 @@ from app.supabase_client import (
     fetch_scoreboard_change_log,
     fetch_scoreboard_missed_alert_classification,
     fetch_scoreboard_missed_alert_summary,
+    fetch_dq_duplicate_place_ids,
+    fetch_dq_jurisdictions_missing_geofence,
+    fetch_dq_jurisdictions_without_topics,
+    fetch_dq_locations_by_data_source,
+    fetch_dq_locations_by_status,
+    fetch_dq_locations_with_parent_not_child,
 )
 
 
@@ -827,6 +833,203 @@ async def permissions(request: Request) -> HTMLResponse:
             "error_message": error_message,
         },
     )
+
+
+# -----------------------------
+# PB-624 Data Quality Assessment Dashboard
+# -----------------------------
+# Every layer is always shown, even when it has nothing missing, so the page
+# makes clear each level was checked.
+JURISDICTION_LAYERS = [
+    ("federal", "Federal"),
+    ("state", "States"),
+    ("county", "Counties"),
+    ("city", "Cities"),
+]
+
+
+def _join_values(values: Any) -> str:
+    """Render a SQL array column (list) as comma-separated text."""
+    if isinstance(values, list):
+        return ", ".join(_display_value(value) for value in values) or "-"
+    return _display_value(values)
+
+
+def _jurisdiction_layer_counts(
+    rows: list[dict[str, Any]], include_federal: bool = True
+) -> list[dict[str, Any]]:
+    """Counts of jurisdictions per layer, in hierarchy order, with 0 for
+    layers that have none. Unknown types are appended after. Federal can be
+    left out for checks that don't apply to it."""
+    counts: dict[str, int] = {}
+    for row in rows:
+        layer = row.get("type") or "unknown"
+        counts[layer] = counts.get(layer, 0) + 1
+
+    known = [key for key, _ in JURISDICTION_LAYERS]
+    layers = [
+        {"label": label, "count": counts.get(key, 0)}
+        for key, label in JURISDICTION_LAYERS
+        if include_federal or key != "federal"
+    ]
+    layers.extend(
+        {"label": str(key).capitalize(), "count": count}
+        for key, count in sorted(counts.items())
+        if key not in known
+    )
+    return layers
+
+
+DQ_TABS = [
+    ("locations", "Locations"),
+    ("jurisdictions", "Jurisdictions"),
+]
+
+
+def _data_quality_tab(value: str | None) -> str:
+    """The selected tab, falling back to the first one for missing/unknown values."""
+    keys = [key for key, _ in DQ_TABS]
+    return value if value in keys else keys[0]
+
+
+# Status bars: the usual outcomes first, then anything unexpected by size.
+LOCATION_STATUS_ORDER = ["allowed", "restricted", "prohibited", "pending", "unknown"]
+_LOCATION_STATUS_TONES = {
+    "allowed": "good",
+    "restricted": "warning",
+    "prohibited": "critical",
+}
+
+
+def _status_bars(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Collapse status/data_source rows into one bar per status, widths
+    relative to the largest status."""
+    counts: dict[str, int] = {}
+    for row in rows:
+        status = row.get("status") or "(none)"
+        counts[status] = counts.get(status, 0) + int(row.get("locations") or 0)
+
+    ordered = [status for status in LOCATION_STATUS_ORDER if status in counts]
+    ordered += sorted((s for s in counts if s not in LOCATION_STATUS_ORDER), key=lambda s: -counts[s])
+    max_count = max(counts.values(), default=0)
+    return [
+        {
+            "label": status,
+            "count": counts[status],
+            "pct": round(counts[status] / max_count * 100, 1) if max_count else 0,
+            "tone": _LOCATION_STATUS_TONES.get(status, "neutral"),
+        }
+        for status in ordered
+    ]
+
+
+def _data_quality_context(tab: str = "locations") -> dict[str, Any]:
+    """Run only the selected tab's checks, each independently so one failing
+    query doesn't hide the rest."""
+    errors: dict[str, str] = {}
+
+    def load(key: str, fetch) -> list[dict[str, Any]]:
+        try:
+            return fetch()
+        except Exception as exc:  # noqa: BLE001 - surface any fetch failure on the page
+            errors[key] = str(exc)
+            return []
+
+    context: dict[str, Any] = {
+        "errors": errors,
+        "tab": tab,
+        "tabs": [
+            {"key": key, "label": label, "url": f"/data-quality?tab={key}"}
+            for key, label in DQ_TABS
+        ],
+    }
+
+    if tab == "jurisdictions":
+        no_topics = load("no_topics", fetch_dq_jurisdictions_without_topics)
+        missing_geofence = load("missing_geofence", fetch_dq_jurisdictions_missing_geofence)
+        context.update(
+            {
+                "missing_geofence_layers": _jurisdiction_layer_counts(missing_geofence, include_federal=False),
+                "missing_geofence_rows": [
+                    {
+                        "id": _display_value(row.get("id")),
+                        "name": _display_value(row.get("name")),
+                        "type": _display_value(row.get("type")),
+                        "parent_id": _display_value(row.get("parent_id")),
+                    }
+                    for row in missing_geofence
+                ],
+                "no_topics_layers": _jurisdiction_layer_counts(no_topics),
+                "no_topics_rows": [
+                    {
+                        "id": _display_value(row.get("id")),
+                        "name": _display_value(row.get("name")),
+                        "type": _display_value(row.get("type")),
+                        "parent_id": _display_value(row.get("parent_id")),
+                    }
+                    for row in no_topics
+                ],
+            }
+        )
+        return context
+
+    by_source = load("locations", fetch_dq_locations_by_data_source)
+    duplicates = load("duplicates", fetch_dq_duplicate_place_ids)
+    parent_not_child = load("parent_not_child", fetch_dq_locations_with_parent_not_child)
+    by_status = load("status", fetch_dq_locations_by_status)
+    context.update(
+        {
+            "status_bars": _status_bars(by_status),
+            "status_rows": [
+                {
+                    # Same label as the bar, so clicking a bar can filter these rows.
+                    "status": row.get("status") or "(none)",
+                    "data_source": _display_value(row.get("data_source")),
+                    "locations": int(row.get("locations") or 0),
+                }
+                for row in by_status
+            ],
+            "total_locations": sum(int(row.get("locations") or 0) for row in by_source),
+            "locations_by_source": [
+                {"data_source": _display_value(row.get("data_source")), "locations": int(row.get("locations") or 0)}
+                for row in by_source
+            ],
+            "duplicate_count": len(duplicates),
+            "duplicate_rows": [
+                {
+                    "place_id": _display_value(row.get("place_id")),
+                    "copies": int(row.get("copies") or 0),
+                    "names": _join_values(row.get("names")),
+                    "sources": _join_values(row.get("sources")),
+                }
+                for row in duplicates
+            ],
+            "parent_not_child_count": len(parent_not_child),
+            "parent_not_child_rows": [
+                {
+                    "id": _display_value(row.get("id")),
+                    "name": _display_value(row.get("name")),
+                    "classification": _display_value(row.get("classification")),
+                    "data_source": _display_value(row.get("data_source")),
+                    "parent_name": _display_value(row.get("parent_name")),
+                    "parent_id": _display_value(row.get("parent_id")),
+                }
+                for row in parent_not_child
+            ],
+        }
+    )
+    return context
+
+
+@router.get("/data-quality", response_class=HTMLResponse)
+async def data_quality(request: Request) -> HTMLResponse:
+    if not _is_authenticated(request):
+        return _login_response(request)
+
+    tab = _data_quality_tab(request.query_params.get("tab"))
+    context = _data_quality_context(tab)
+    context["request"] = request
+    return templates.TemplateResponse(request, "data_quality.html", context)
 
 
 @router.post("/login", response_class=HTMLResponse)
