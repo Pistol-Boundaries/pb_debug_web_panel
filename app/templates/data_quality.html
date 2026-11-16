@@ -351,10 +351,67 @@
         </details>
       {% endif %}
     </div>
+    {# ---------- Geofences with multiple parts (PB-658) ---------- #}
+    <div class="chart-section">
+      <h2>Geofences with multiple parts</h2>
+      <p class="chart-note">Location geofences split into more than one shape, by number of parts. Some are expected (campuses, airports); a source that shows up in every bucket is worth a closer look. Click a bar to see just that bucket by data source.</p>
+      {% if errors.multipart %}
+        <div class="alert alert-error"><strong>Unable to load multi-part geofences.</strong><span>{{ errors.multipart }}</span></div>
+      {% else %}
+        <div class="bar-chart" id="multipart-chart">
+          {% for bar in multipart_bars %}
+            <div class="bar-row bar-row-clickable" data-parts="{{ bar.key }}" role="button" tabindex="0" aria-pressed="false" aria-controls="multipart-details">
+              <span class="bar-row-label">{{ bar.label }}</span>
+              <div class="bar-track">
+                <div
+                  class="bar-fill"
+                  style="width: {{ bar.pct }}%"
+                  title="{{ bar.label }}: {{ '{:,}'.format(bar.count) }} locations"
+                ></div>
+              </div>
+              <span class="bar-value">{{ "{:,}".format(bar.count) }}</span>
+            </div>
+          {% else %}
+            <p class="empty-state">No geofences with multiple parts.</p>
+          {% endfor %}
+        </div>
+        <details class="raw-data-toggle" id="multipart-details">
+          <summary>View the {{ "{:,}".format(multipart_total) }} multi-part geofences by data source</summary>
+          <p class="dq-filter-note" id="multipart-filter-note" hidden>
+            Showing <strong data-filter-name></strong> only.
+            <button type="button" class="link-button" id="multipart-show-all">Show all part counts</button>
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Parts</th>
+                  <th>Data source</th>
+                  <th>Locations</th>
+                  <th>Most parts</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for row in multipart_rows %}
+                  <tr data-parts="{{ row.key }}">
+                    <td>{{ row.label }}</td>
+                    <td>{{ row.data_source }}</td>
+                    <td>{{ "{:,}".format(row.locations) }}</td>
+                    <td>{{ row.most_parts }}</td>
+                  </tr>
+                {% else %}
+                  <tr><td colspan="4">No geofences with multiple parts.</td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </details>
+      {% endif %}
+    </div>
     {% endif %}
   </section>
 {% endblock %}
 
 {% block extra_scripts %}
-  <script src="/static/data_quality.js?v=20261101-status-filter"></script>
+  <script src="/static/data_quality.js?v=20261115-multipart-filter"></script>
 {% endblock %}

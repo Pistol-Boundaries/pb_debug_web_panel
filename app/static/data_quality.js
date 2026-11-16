@@ -1,45 +1,74 @@
-// Data Quality page: click a status bar to filter the "by data source" table
-// to that status. Click the same bar again (or "Show all") to clear it.
-// Without JavaScript the table simply shows every status.
+// Data Quality page: click a bar to filter the drill-down table underneath it
+// to that bar's rows. Click the same bar again (or "Show all") to clear it.
+// Without JavaScript the tables simply show every row.
+//
+// Used by two charts:
+//   - Locations by status            (bars/rows marked data-status)
+//   - Geofences with multiple parts  (bars/rows marked data-parts)
 (() => {
-  const chart = document.getElementById('status-chart');
-  const details = document.getElementById('status-details');
-  if (!chart || !details) return;
+  const wireBarFilter = ({ chartId, detailsId, noteId, showAllId, attr, summaryFor }) => {
+    const chart = document.getElementById(chartId);
+    const details = document.getElementById(detailsId);
+    if (!chart || !details) return;
 
-  const summary = details.querySelector('summary');
-  const defaultLabel = summary.textContent;
-  const note = document.getElementById('status-filter-note');
-  const noteName = note.querySelector('[data-status-name]');
-  const showAll = document.getElementById('status-show-all');
-  const bars = [...chart.querySelectorAll('.bar-row[data-status]')];
-  const rows = [...details.querySelectorAll('tbody tr[data-status]')];
-  let selected = null;
+    const summary = details.querySelector('summary');
+    const defaultLabel = summary.textContent;
+    const note = document.getElementById(noteId);
+    const noteName = note.querySelector('[data-status-name], [data-filter-name]');
+    const showAll = document.getElementById(showAllId);
+    const bars = [...chart.querySelectorAll(`.bar-row[data-${attr}]`)];
+    const rows = [...details.querySelectorAll(`tbody tr[data-${attr}]`)];
+    const labelFor = (value) => {
+      const bar = bars.find((b) => b.dataset[attr] === value);
+      const label = bar && bar.querySelector('.bar-row-label');
+      return label ? label.textContent.trim() : value;
+    };
+    let selected = null;
 
-  const apply = (status) => {
-    selected = status;
+    const apply = (value) => {
+      selected = value;
+      bars.forEach((bar) => {
+        const on = bar.dataset[attr] === value;
+        bar.classList.toggle('is-selected', on);
+        bar.setAttribute('aria-pressed', on ? 'true' : 'false');
+      });
+      rows.forEach((row) => {
+        row.hidden = value !== null && row.dataset[attr] !== value;
+      });
+      note.hidden = value === null;
+      noteName.textContent = value === null ? '' : labelFor(value);
+      summary.textContent = value === null ? defaultLabel : summaryFor(labelFor(value));
+      if (value !== null) details.open = true;
+    };
+
     bars.forEach((bar) => {
-      const on = bar.dataset.status === status;
-      bar.classList.toggle('is-selected', on);
-      bar.setAttribute('aria-pressed', on ? 'true' : 'false');
+      const toggle = () => apply(selected === bar.dataset[attr] ? null : bar.dataset[attr]);
+      bar.addEventListener('click', toggle);
+      bar.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          toggle();
+        }
+      });
     });
-    rows.forEach((row) => {
-      row.hidden = status !== null && row.dataset.status !== status;
-    });
-    note.hidden = status === null;
-    noteName.textContent = status || '';
-    summary.textContent = status ? `View ${status} locations by data source` : defaultLabel;
-    if (status) details.open = true;
+    if (showAll) showAll.addEventListener('click', () => apply(null));
   };
 
-  bars.forEach((bar) => {
-    const toggle = () => apply(selected === bar.dataset.status ? null : bar.dataset.status);
-    bar.addEventListener('click', toggle);
-    bar.addEventListener('keydown', (event) => {
-      if (event.key === 'Enter' || event.key === ' ') {
-        event.preventDefault();
-        toggle();
-      }
-    });
+  wireBarFilter({
+    chartId: 'status-chart',
+    detailsId: 'status-details',
+    noteId: 'status-filter-note',
+    showAllId: 'status-show-all',
+    attr: 'status',
+    summaryFor: (label) => `View ${label} locations by data source`,
   });
-  showAll.addEventListener('click', () => apply(null));
+
+  wireBarFilter({
+    chartId: 'multipart-chart',
+    detailsId: 'multipart-details',
+    noteId: 'multipart-filter-note',
+    showAllId: 'multipart-show-all',
+    attr: 'parts',
+    summaryFor: (label) => `View geofences with ${label} by data source`,
+  });
 })();

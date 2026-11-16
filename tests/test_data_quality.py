@@ -51,6 +51,13 @@ def _fake_fetches(monkeypatch, **overrides):
             {'id': 'loc-9', 'name': 'Orphan Snack Bar', 'data_source': 'Manual',
              'place_id': 'ChIJorphan', 'status': 'pending'},
         ],
+        'fetch_dq_multipart_geofences_by_source': lambda: [
+            {'parts': 2, 'data_source': 'Florida Bars', 'locations': 600, 'most_parts': 2},
+            {'parts': 2, 'data_source': 'Federal Buildings', 'locations': 300, 'most_parts': 2},
+            {'parts': 6, 'data_source': 'Florida Bars', 'locations': 4, 'most_parts': 6},
+            {'parts': 7, 'data_source': 'Florida Bars', 'locations': 1, 'most_parts': 7},
+            {'parts': 54, 'data_source': 'Universities and Colleges', 'locations': 1, 'most_parts': 54},
+        ],
         'fetch_dq_locations_with_parent_not_child': lambda: [
             {'id': 'loc-1', 'name': 'Gift Shop', 'classification': 'location', 'data_source': 'Manual',
              'parent_id': 'loc-0', 'parent_name': 'State Fairgrounds'},
@@ -110,6 +117,39 @@ def test_status_bars_empty():
     assert routes._status_bars([]) == []
 
 
+def test_geofence_part_buckets():
+    assert routes._geofence_part_bucket(2) == '2'
+    assert routes._geofence_part_bucket(4) == '4'
+    assert routes._geofence_part_bucket(5) == '5-9'
+    assert routes._geofence_part_bucket(9) == '5-9'
+    assert routes._geofence_part_bucket(10) == '10+'
+    assert routes._geofence_part_bucket(54) == '10+'
+
+
+def test_multipart_bars_and_rows():
+    rows = [
+        {'parts': 6, 'data_source': 'Florida Bars', 'locations': 4, 'most_parts': 6},
+        {'parts': 7, 'data_source': 'Florida Bars', 'locations': 1, 'most_parts': 7},
+        {'parts': 2, 'data_source': 'Federal Buildings', 'locations': 300, 'most_parts': 2},
+        {'parts': 2, 'data_source': 'Florida Bars', 'locations': 600, 'most_parts': 2},
+    ]
+    bars = routes._multipart_bars(rows)
+    assert [b['key'] for b in bars] == ['2', '5-9']          # empty buckets left out, in order
+    assert bars[0] == {'key': '2', 'label': '2 parts', 'count': 900, 'pct': 100.0}
+    assert bars[1]['count'] == 5
+
+    drill = routes._multipart_rows(rows)
+    assert [(r['key'], r['data_source']) for r in drill] == [
+        ('2', 'Florida Bars'), ('2', 'Federal Buildings'), ('5-9', 'Florida Bars'),
+    ]
+    assert drill[2]['locations'] == 5 and drill[2]['most_parts'] == 7   # 6- and 7-part rows merged
+
+
+def test_multipart_empty():
+    assert routes._multipart_bars([]) == []
+    assert routes._multipart_rows([]) == []
+
+
 def test_tab_selection_defaults_to_locations():
     assert routes._data_quality_tab(None) == 'locations'
     assert routes._data_quality_tab('jurisdictions') == 'jurisdictions'
@@ -126,6 +166,7 @@ def test_locations_context_totals(monkeypatch):
     assert context['parent_not_child_count'] == 1
     assert context['child_no_parent_count'] == 1
     assert context['child_no_parent_rows'][0]['place_id'] == 'ChIJorphan'
+    assert context['multipart_total'] == 906
     assert 'no_topics_rows' not in context
 
 
@@ -147,6 +188,7 @@ def test_each_tab_only_runs_its_own_checks(monkeypatch):
         fetch_dq_locations_with_parent_not_child=must_not_run,
         fetch_dq_locations_by_status=must_not_run,
         fetch_dq_child_locations_without_parent=must_not_run,
+        fetch_dq_multipart_geofences_by_source=must_not_run,
     )
     context = routes._data_quality_context('jurisdictions')
     assert context['errors'] == {}
@@ -166,6 +208,10 @@ def test_locations_tab_is_the_default(client, monkeypatch):
     assert 'State Fairgrounds' in text            # parent name in drill-down
     assert 'Child locations without a parent' in text
     assert 'Orphan Snack Bar' in text             # child-without-parent drill-down
+    assert 'Geofences with multiple parts' in text
+    assert 'data-parts="10+" role="button"' in text           # clickable parts bar
+    assert '<tr data-parts="5-9">' in text                    # filterable parts row
+    assert 'Universities and Colleges' in text
     assert 'Locations by status' in text
     assert 'bar-fill tone-critical' in text       # prohibited bar
     assert 'Iowa Casinos' in text                 # status drill-down
@@ -213,10 +259,12 @@ def test_empty_results(client, monkeypatch):
         fetch_dq_jurisdictions_missing_geofence=lambda: [],
         fetch_dq_locations_with_parent_not_child=lambda: [],
         fetch_dq_child_locations_without_parent=lambda: [],
+        fetch_dq_multipart_geofences_by_source=lambda: [],
     )
     locations_text = client.get('/data-quality').text
     assert 'No duplicated place IDs.' in locations_text
     assert 'No child locations missing a parent.' in locations_text
+    assert 'No geofences with multiple parts.' in locations_text
     jurisdictions_text = client.get('/data-quality?tab=jurisdictions').text
     assert 'Every jurisdiction has topics.' in jurisdictions_text
     assert 'Every jurisdiction has a geofence.' in jurisdictions_text

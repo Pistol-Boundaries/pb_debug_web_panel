@@ -28,6 +28,7 @@ from app.supabase_client import (
     fetch_dq_locations_by_data_source,
     fetch_dq_locations_by_status,
     fetch_dq_locations_with_parent_not_child,
+    fetch_dq_multipart_geofences_by_source,
 )
 
 
@@ -924,6 +925,67 @@ def _status_bars(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     ]
 
 
+# PB-658: part counts are grouped into these buckets for the bar chart, so a
+# handful of 50-part outliers don't each get their own bar.
+GEOFENCE_PART_BUCKETS = [
+    ("2", "2 parts"),
+    ("3", "3 parts"),
+    ("4", "4 parts"),
+    ("5-9", "5-9 parts"),
+    ("10+", "10+ parts"),
+]
+_GEOFENCE_PART_LABELS = dict(GEOFENCE_PART_BUCKETS)
+_GEOFENCE_PART_ORDER = [key for key, _ in GEOFENCE_PART_BUCKETS]
+
+
+def _geofence_part_bucket(parts: int) -> str:
+    if parts >= 10:
+        return "10+"
+    if parts >= 5:
+        return "5-9"
+    return str(parts)
+
+
+def _multipart_bars(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """One bar per part-count bucket that has locations, widths relative to the
+    largest bucket."""
+    counts: dict[str, int] = {}
+    for row in rows:
+        bucket = _geofence_part_bucket(int(row.get("parts") or 0))
+        counts[bucket] = counts.get(bucket, 0) + int(row.get("locations") or 0)
+
+    max_count = max(counts.values(), default=0)
+    return [
+        {
+            "key": key,
+            "label": _GEOFENCE_PART_LABELS[key],
+            "count": counts[key],
+            "pct": round(counts[key] / max_count * 100, 1) if max_count else 0,
+        }
+        for key in _GEOFENCE_PART_ORDER
+        if counts.get(key)
+    ]
+
+
+def _multipart_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Drill-down rows: one per bucket and data source, biggest first within
+    each bucket. `key` matches the bar so clicking a bar can filter these."""
+    grouped: dict[tuple[str, str], dict[str, Any]] = {}
+    for row in rows:
+        parts = int(row.get("parts") or 0)
+        key = _geofence_part_bucket(parts)
+        source = _display_value(row.get("data_source"))
+        entry = grouped.setdefault(
+            (key, source),
+            {"key": key, "label": _GEOFENCE_PART_LABELS.get(key, key), "data_source": source, "locations": 0, "most_parts": 0},
+        )
+        entry["locations"] += int(row.get("locations") or 0)
+        entry["most_parts"] = max(entry["most_parts"], int(row.get("most_parts") or parts))
+
+    order = {key: index for index, key in enumerate(_GEOFENCE_PART_ORDER)}
+    return sorted(grouped.values(), key=lambda r: (order.get(r["key"], len(order)), -r["locations"], r["data_source"]))
+
+
 def _data_quality_context(tab: str = "locations") -> dict[str, Any]:
     """Run only the selected tab's checks, each independently so one failing
     query doesn't hide the rest."""
@@ -978,6 +1040,7 @@ def _data_quality_context(tab: str = "locations") -> dict[str, Any]:
     duplicates = load("duplicates", fetch_dq_duplicate_place_ids)
     parent_not_child = load("parent_not_child", fetch_dq_locations_with_parent_not_child)
     child_no_parent = load("child_no_parent", fetch_dq_child_locations_without_parent)
+    multipart = load("multipart", fetch_dq_multipart_geofences_by_source)
     by_status = load("status", fetch_dq_locations_by_status)
     context.update(
         {
@@ -1029,6 +1092,9 @@ def _data_quality_context(tab: str = "locations") -> dict[str, Any]:
                 }
                 for row in child_no_parent
             ],
+            "multipart_total": sum(int(row.get("locations") or 0) for row in multipart),
+            "multipart_bars": _multipart_bars(multipart),
+            "multipart_rows": _multipart_rows(multipart),
         }
     )
     return context

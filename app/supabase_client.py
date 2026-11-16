@@ -330,6 +330,13 @@ def fetch_dq_child_locations_without_parent() -> list[dict[str, Any]]:
     return response.data or []
 
 
+def fetch_dq_multipart_geofences_by_source() -> list[dict[str, Any]]:
+    """PB-658: geofences with more than one part, counted per part count and
+    data_source (dq_multipart_geofences_by_source)."""
+    response = get_supabase_client().rpc("dq_multipart_geofences_by_source").execute()
+    return response.data or []
+
+
 def fetch_dq_locations_by_status() -> list[dict[str, Any]]:
     """Location counts per status and data_source (dq_locations_by_status)."""
     response = get_supabase_client().rpc("dq_locations_by_status").execute()
