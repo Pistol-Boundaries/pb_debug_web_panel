@@ -36,6 +36,10 @@ def _fake_fetches(monkeypatch, **overrides):
         'fetch_dq_jurisdictions_missing_geofence': lambda: [
             {'id': '06999', 'name': 'Nowhere', 'type': 'county', 'parent_id': '06'},
         ],
+        'fetch_dq_jurisdiction_path_issues': lambda: [
+            {'issue': 'missing', 'descendant_id': '2824', 'descendant_name': 'Test_Jinesh_Jurisdiction',
+             'descendant_type': None, 'ancestor_id': '2824', 'ancestor_name': 'Test_Jinesh_Jurisdiction', 'depth': 0},
+        ],
         'fetch_dq_jurisdictions_without_topics': lambda: [
             {'id': '06041', 'name': 'Marin', 'type': 'county', 'parent_id': '06'},
             {'id': '06073', 'name': 'San Diego', 'type': 'county', 'parent_id': '06'},
@@ -150,6 +154,17 @@ def test_multipart_empty():
     assert routes._multipart_rows([]) == []
 
 
+def test_path_issue_tiles_always_show_both():
+    assert routes._path_issue_tiles([]) == [
+        {'key': 'missing', 'label': 'Missing paths', 'count': 0},
+        {'key': 'unexpected', 'label': 'Unexpected paths', 'count': 0},
+    ]
+    tiles = routes._path_issue_tiles([
+        {'issue': 'missing'}, {'issue': 'unexpected'}, {'issue': 'unexpected'},
+    ])
+    assert [t['count'] for t in tiles] == [1, 2]
+
+
 def test_tab_selection_defaults_to_locations():
     assert routes._data_quality_tab(None) == 'locations'
     assert routes._data_quality_tab('jurisdictions') == 'jurisdictions'
@@ -178,6 +193,7 @@ def test_each_tab_only_runs_its_own_checks(monkeypatch):
         monkeypatch,
         fetch_dq_jurisdictions_without_topics=must_not_run,
         fetch_dq_jurisdictions_missing_geofence=must_not_run,
+        fetch_dq_jurisdiction_path_issues=must_not_run,
     )
     assert routes._data_quality_context('locations')['errors'] == {}
 
@@ -193,6 +209,8 @@ def test_each_tab_only_runs_its_own_checks(monkeypatch):
     context = routes._data_quality_context('jurisdictions')
     assert context['errors'] == {}
     assert [layer['count'] for layer in context['no_topics_layers']] == [0, 0, 2, 1]
+    assert [t['count'] for t in context['path_issue_tiles']] == [1, 0]
+    assert context['path_issue_rows'][0]['issue_label'] == 'Missing'
 
 
 def test_locations_tab_is_the_default(client, monkeypatch):
@@ -230,6 +248,10 @@ def test_jurisdictions_tab(client, monkeypatch):
     assert 'San Diego' in text                    # jurisdictions drill-down
     assert 'Jurisdictions missing a geofence' in text
     assert 'Nowhere' in text                      # missing geofence drill-down
+    assert 'Jurisdiction path issues' in text
+    assert 'data-issue="missing" role="button"' in text       # clickable tile
+    assert '<tr data-issue="missing">' in text                # filterable row
+    assert 'Test_Jinesh_Jurisdiction' in text
     assert 'Duplicate place IDs' not in text
 
 
@@ -260,6 +282,7 @@ def test_empty_results(client, monkeypatch):
         fetch_dq_locations_with_parent_not_child=lambda: [],
         fetch_dq_child_locations_without_parent=lambda: [],
         fetch_dq_multipart_geofences_by_source=lambda: [],
+        fetch_dq_jurisdiction_path_issues=lambda: [],
     )
     locations_text = client.get('/data-quality').text
     assert 'No duplicated place IDs.' in locations_text
@@ -268,6 +291,7 @@ def test_empty_results(client, monkeypatch):
     jurisdictions_text = client.get('/data-quality?tab=jurisdictions').text
     assert 'Every jurisdiction has topics.' in jurisdictions_text
     assert 'Every jurisdiction has a geofence.' in jurisdictions_text
+    assert 'Every jurisdiction path matches its parent chain.' in jurisdictions_text
 
 
 def test_requires_login(monkeypatch):

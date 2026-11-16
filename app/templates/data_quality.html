@@ -118,6 +118,61 @@
       {% endif %}
     </div>
 
+    {# ---------- Jurisdiction path issues (PB-659) ---------- #}
+    <div class="chart-section">
+      <h2>Jurisdiction path issues</h2>
+      <p class="chart-note">Every jurisdiction should have a <code>jurisdiction_paths</code> row for itself (depth 0) and one for each ancestor up its <code>parent_id</code> chain. <strong>Missing</strong> = a row the chain needs but isn't there; <strong>unexpected</strong> = a row the chain doesn't support. 0 is healthy. Click a tile to see just those rows.</p>
+      {% if errors.path_issues %}
+        <div class="alert alert-error"><strong>Unable to load jurisdiction path issues.</strong><span>{{ errors.path_issues }}</span></div>
+      {% else %}
+        <div class="stat-tiles" id="path-issue-tiles">
+          {% for tile in path_issue_tiles %}
+            <div class="stat-tile stat-tile-clickable" data-issue="{{ tile.key }}" role="button" tabindex="0" aria-pressed="false" aria-controls="path-issue-details">
+              <p class="stat-tile-label">{{ tile.label }}</p>
+              <p class="stat-tile-value">{{ "{:,}".format(tile.count) }}</p>
+            </div>
+          {% endfor %}
+        </div>
+        <details class="raw-data-toggle" id="path-issue-details">
+          <summary>View the {{ "{:,}".format(path_issue_rows | length) }} jurisdiction path issues</summary>
+          <p class="dq-filter-note" id="path-issue-filter-note" hidden>
+            Showing <strong data-filter-name></strong> only.
+            <button type="button" class="link-button" id="path-issue-show-all">Show all issues</button>
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Issue</th>
+                  <th>Jurisdiction ID</th>
+                  <th>Jurisdiction</th>
+                  <th>Type</th>
+                  <th>Ancestor ID</th>
+                  <th>Ancestor</th>
+                  <th>Depth</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for row in path_issue_rows %}
+                  <tr data-issue="{{ row.issue }}">
+                    <td>{{ row.issue_label }}</td>
+                    <td><code>{{ row.descendant_id }}</code></td>
+                    <td>{{ row.descendant_name }}</td>
+                    <td>{{ row.descendant_type }}</td>
+                    <td><code>{{ row.ancestor_id }}</code></td>
+                    <td>{{ row.ancestor_name }}</td>
+                    <td>{{ row.depth }}</td>
+                  </tr>
+                {% else %}
+                  <tr><td colspan="7">Every jurisdiction path matches its parent chain.</td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </details>
+      {% endif %}
+    </div>
+
     {% else %}
     {# ---------- Total locations ---------- #}
     <div class="chart-section">
@@ -413,5 +468,5 @@
 {% endblock %}
 
 {% block extra_scripts %}
-  <script src="/static/data_quality.js?v=20261115-multipart-filter"></script>
+  <script src="/static/data_quality.js?v=20261115-path-issues"></script>
 {% endblock %}

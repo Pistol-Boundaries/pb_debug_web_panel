@@ -1,12 +1,16 @@
-// Data Quality page: click a bar to filter the drill-down table underneath it
-// to that bar's rows. Click the same bar again (or "Show all") to clear it.
+// Data Quality page: click a bar (or tile) to filter the drill-down table
+// underneath it to that item's rows. Click it again (or "Show all") to clear it.
 // Without JavaScript the tables simply show every row.
 //
-// Used by two charts:
+// Used by:
 //   - Locations by status            (bars/rows marked data-status)
 //   - Geofences with multiple parts  (bars/rows marked data-parts)
+//   - Jurisdiction path issues       (tiles/rows marked data-issue)
 (() => {
-  const wireBarFilter = ({ chartId, detailsId, noteId, showAllId, attr, summaryFor }) => {
+  const wireBarFilter = ({
+    chartId, detailsId, noteId, showAllId, attr, summaryFor,
+    itemSelector = '.bar-row', labelSelector = '.bar-row-label',
+  }) => {
     const chart = document.getElementById(chartId);
     const details = document.getElementById(detailsId);
     if (!chart || !details) return;
@@ -16,11 +20,11 @@
     const note = document.getElementById(noteId);
     const noteName = note.querySelector('[data-status-name], [data-filter-name]');
     const showAll = document.getElementById(showAllId);
-    const bars = [...chart.querySelectorAll(`.bar-row[data-${attr}]`)];
+    const bars = [...chart.querySelectorAll(`${itemSelector}[data-${attr}]`)];
     const rows = [...details.querySelectorAll(`tbody tr[data-${attr}]`)];
     const labelFor = (value) => {
       const bar = bars.find((b) => b.dataset[attr] === value);
-      const label = bar && bar.querySelector('.bar-row-label');
+      const label = bar && bar.querySelector(labelSelector);
       return label ? label.textContent.trim() : value;
     };
     let selected = null;
@@ -70,5 +74,16 @@
     showAllId: 'multipart-show-all',
     attr: 'parts',
     summaryFor: (label) => `View geofences with ${label} by data source`,
+  });
+
+  wireBarFilter({
+    chartId: 'path-issue-tiles',
+    detailsId: 'path-issue-details',
+    noteId: 'path-issue-filter-note',
+    showAllId: 'path-issue-show-all',
+    attr: 'issue',
+    itemSelector: '.stat-tile',
+    labelSelector: '.stat-tile-label',
+    summaryFor: (label) => `View ${label.toLowerCase()}`,
   });
 })();

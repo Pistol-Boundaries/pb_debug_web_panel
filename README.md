@@ -36,6 +36,7 @@ must exist in the Supabase project the panel points to (dev):
 - `dq_multipart_geofences_by_source()` - geofences with more than one part, by part count and data source (PB-658)
 - `dq_locations_by_status()` - location counts by status and data source
 - `dq_jurisdictions_missing_geofence()` - non-federal jurisdictions with no buffered geofence
+- `dq_jurisdiction_path_issues()` - jurisdiction_paths rows missing from, or not supported by, the parent_id chain (PB-659)
 
 Apply new or changed functions in the Supabase dashboard SQL editor. Each
 check loads independently, so a missing function only errors its own section.

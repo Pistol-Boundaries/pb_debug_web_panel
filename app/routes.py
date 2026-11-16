@@ -23,6 +23,7 @@ from app.supabase_client import (
     fetch_scoreboard_missed_alert_summary,
     fetch_dq_child_locations_without_parent,
     fetch_dq_duplicate_place_ids,
+    fetch_dq_jurisdiction_path_issues,
     fetch_dq_jurisdictions_missing_geofence,
     fetch_dq_jurisdictions_without_topics,
     fetch_dq_locations_by_data_source,
@@ -986,6 +987,23 @@ def _multipart_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return sorted(grouped.values(), key=lambda r: (order.get(r["key"], len(order)), -r["locations"], r["data_source"]))
 
 
+# PB-659: the two kinds of jurisdiction_paths problem, in display order.
+PATH_ISSUE_TYPES = [
+    ("missing", "Missing paths"),
+    ("unexpected", "Unexpected paths"),
+]
+
+
+def _path_issue_tiles(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """One tile per issue type, always both, so a 0 shows the check ran."""
+    counts = {key: 0 for key, _ in PATH_ISSUE_TYPES}
+    for row in rows:
+        issue = row.get("issue")
+        if issue in counts:
+            counts[issue] += 1
+    return [{"key": key, "label": label, "count": counts[key]} for key, label in PATH_ISSUE_TYPES]
+
+
 def _data_quality_context(tab: str = "locations") -> dict[str, Any]:
     """Run only the selected tab's checks, each independently so one failing
     query doesn't hide the rest."""
@@ -1010,6 +1028,7 @@ def _data_quality_context(tab: str = "locations") -> dict[str, Any]:
     if tab == "jurisdictions":
         no_topics = load("no_topics", fetch_dq_jurisdictions_without_topics)
         missing_geofence = load("missing_geofence", fetch_dq_jurisdictions_missing_geofence)
+        path_issues = load("path_issues", fetch_dq_jurisdiction_path_issues)
         context.update(
             {
                 "missing_geofence_layers": _jurisdiction_layer_counts(missing_geofence, include_federal=False),
@@ -1031,6 +1050,21 @@ def _data_quality_context(tab: str = "locations") -> dict[str, Any]:
                         "parent_id": _display_value(row.get("parent_id")),
                     }
                     for row in no_topics
+                ],
+                "path_issue_tiles": _path_issue_tiles(path_issues),
+                "path_issue_rows": [
+                    {
+                        # Same key as the tile, so clicking a tile can filter these rows.
+                        "issue": row.get("issue") or "(none)",
+                        "issue_label": (row.get("issue") or "-").capitalize(),
+                        "descendant_id": _display_value(row.get("descendant_id")),
+                        "descendant_name": _display_value(row.get("descendant_name")),
+                        "descendant_type": _display_value(row.get("descendant_type")),
+                        "ancestor_id": _display_value(row.get("ancestor_id")),
+                        "ancestor_name": _display_value(row.get("ancestor_name")),
+                        "depth": _display_value(row.get("depth")),
+                    }
+                    for row in path_issues
                 ],
             }
         )

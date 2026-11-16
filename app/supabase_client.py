@@ -348,3 +348,10 @@ def fetch_dq_jurisdictions_missing_geofence() -> list[dict[str, Any]]:
     (dq_jurisdictions_missing_geofence)."""
     response = get_supabase_client().rpc("dq_jurisdictions_missing_geofence").execute()
     return response.data or []
+
+
+def fetch_dq_jurisdiction_path_issues() -> list[dict[str, Any]]:
+    """PB-659: jurisdiction_paths rows missing from, or not supported by, the
+    parent_id chain (dq_jurisdiction_path_issues)."""
+    response = get_supabase_client().rpc("dq_jurisdiction_path_issues").execute()
+    return response.data or []
