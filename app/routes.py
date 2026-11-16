@@ -21,6 +21,15 @@ from app.supabase_client import (
     fetch_scoreboard_change_log,
     fetch_scoreboard_missed_alert_classification,
     fetch_scoreboard_missed_alert_summary,
+    fetch_dq_child_locations_without_parent,
+    fetch_dq_duplicate_place_ids,
+    fetch_dq_jurisdiction_path_issues,
+    fetch_dq_jurisdictions_missing_geofence,
+    fetch_dq_jurisdictions_without_topics,
+    fetch_dq_locations_by_data_source,
+    fetch_dq_locations_by_status,
+    fetch_dq_locations_with_parent_not_child,
+    fetch_dq_multipart_geofences_by_source,
 )
 
 
@@ -827,6 +836,313 @@ async def permissions(request: Request) -> HTMLResponse:
             "error_message": error_message,
         },
     )
+
+
+# -----------------------------
+# PB-624 Data Quality Assessment Dashboard
+# -----------------------------
+# Every layer is always shown, even when it has nothing missing, so the page
+# makes clear each level was checked.
+JURISDICTION_LAYERS = [
+    ("federal", "Federal"),
+    ("state", "States"),
+    ("county", "Counties"),
+    ("city", "Cities"),
+]
+
+
+def _join_values(values: Any) -> str:
+    """Render a SQL array column (list) as comma-separated text."""
+    if isinstance(values, list):
+        return ", ".join(_display_value(value) for value in values) or "-"
+    return _display_value(values)
+
+
+def _jurisdiction_layer_counts(
+    rows: list[dict[str, Any]], include_federal: bool = True
+) -> list[dict[str, Any]]:
+    """Counts of jurisdictions per layer, in hierarchy order, with 0 for
+    layers that have none. Unknown types are appended after. Federal can be
+    left out for checks that don't apply to it."""
+    counts: dict[str, int] = {}
+    for row in rows:
+        layer = row.get("type") or "unknown"
+        counts[layer] = counts.get(layer, 0) + 1
+
+    known = [key for key, _ in JURISDICTION_LAYERS]
+    layers = [
+        {"label": label, "count": counts.get(key, 0)}
+        for key, label in JURISDICTION_LAYERS
+        if include_federal or key != "federal"
+    ]
+    layers.extend(
+        {"label": str(key).capitalize(), "count": count}
+        for key, count in sorted(counts.items())
+        if key not in known
+    )
+    return layers
+
+
+DQ_TABS = [
+    ("locations", "Locations"),
+    ("jurisdictions", "Jurisdictions"),
+]
+
+
+def _data_quality_tab(value: str | None) -> str:
+    """The selected tab, falling back to the first one for missing/unknown values."""
+    keys = [key for key, _ in DQ_TABS]
+    return value if value in keys else keys[0]
+
+
+# Status bars: the usual outcomes first, then anything unexpected by size.
+LOCATION_STATUS_ORDER = ["allowed", "restricted", "prohibited", "pending", "unknown"]
+_LOCATION_STATUS_TONES = {
+    "allowed": "good",
+    "restricted": "warning",
+    "prohibited": "critical",
+}
+
+
+def _status_bars(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Collapse status/data_source rows into one bar per status, widths
+    relative to the largest status."""
+    counts: dict[str, int] = {}
+    for row in rows:
+        status = row.get("status") or "(none)"
+        counts[status] = counts.get(status, 0) + int(row.get("locations") or 0)
+
+    ordered = [status for status in LOCATION_STATUS_ORDER if status in counts]
+    ordered += sorted((s for s in counts if s not in LOCATION_STATUS_ORDER), key=lambda s: -counts[s])
+    max_count = max(counts.values(), default=0)
+    return [
+        {
+            "label": status,
+            "count": counts[status],
+            "pct": round(counts[status] / max_count * 100, 1) if max_count else 0,
+            "tone": _LOCATION_STATUS_TONES.get(status, "neutral"),
+        }
+        for status in ordered
+    ]
+
+
+# PB-658: part counts are grouped into these buckets for the bar chart, so a
+# handful of 50-part outliers don't each get their own bar.
+GEOFENCE_PART_BUCKETS = [
+    ("2", "2 parts"),
+    ("3", "3 parts"),
+    ("4", "4 parts"),
+    ("5-9", "5-9 parts"),
+    ("10+", "10+ parts"),
+]
+_GEOFENCE_PART_LABELS = dict(GEOFENCE_PART_BUCKETS)
+_GEOFENCE_PART_ORDER = [key for key, _ in GEOFENCE_PART_BUCKETS]
+
+
+def _geofence_part_bucket(parts: int) -> str:
+    if parts >= 10:
+        return "10+"
+    if parts >= 5:
+        return "5-9"
+    return str(parts)
+
+
+def _multipart_bars(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """One bar per part-count bucket that has locations, widths relative to the
+    largest bucket."""
+    counts: dict[str, int] = {}
+    for row in rows:
+        bucket = _geofence_part_bucket(int(row.get("parts") or 0))
+        counts[bucket] = counts.get(bucket, 0) + int(row.get("locations") or 0)
+
+    max_count = max(counts.values(), default=0)
+    return [
+        {
+            "key": key,
+            "label": _GEOFENCE_PART_LABELS[key],
+            "count": counts[key],
+            "pct": round(counts[key] / max_count * 100, 1) if max_count else 0,
+        }
+        for key in _GEOFENCE_PART_ORDER
+        if counts.get(key)
+    ]
+
+
+def _multipart_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Drill-down rows: one per bucket and data source, biggest first within
+    each bucket. `key` matches the bar so clicking a bar can filter these."""
+    grouped: dict[tuple[str, str], dict[str, Any]] = {}
+    for row in rows:
+        parts = int(row.get("parts") or 0)
+        key = _geofence_part_bucket(parts)
+        source = _display_value(row.get("data_source"))
+        entry = grouped.setdefault(
+            (key, source),
+            {"key": key, "label": _GEOFENCE_PART_LABELS.get(key, key), "data_source": source, "locations": 0, "most_parts": 0},
+        )
+        entry["locations"] += int(row.get("locations") or 0)
+        entry["most_parts"] = max(entry["most_parts"], int(row.get("most_parts") or parts))
+
+    order = {key: index for index, key in enumerate(_GEOFENCE_PART_ORDER)}
+    return sorted(grouped.values(), key=lambda r: (order.get(r["key"], len(order)), -r["locations"], r["data_source"]))
+
+
+# PB-659: the two kinds of jurisdiction_paths problem, in display order.
+PATH_ISSUE_TYPES = [
+    ("missing", "Missing paths"),
+    ("unexpected", "Unexpected paths"),
+]
+
+
+def _path_issue_tiles(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """One tile per issue type, always both, so a 0 shows the check ran."""
+    counts = {key: 0 for key, _ in PATH_ISSUE_TYPES}
+    for row in rows:
+        issue = row.get("issue")
+        if issue in counts:
+            counts[issue] += 1
+    return [{"key": key, "label": label, "count": counts[key]} for key, label in PATH_ISSUE_TYPES]
+
+
+def _data_quality_context(tab: str = "locations") -> dict[str, Any]:
+    """Run only the selected tab's checks, each independently so one failing
+    query doesn't hide the rest."""
+    errors: dict[str, str] = {}
+
+    def load(key: str, fetch) -> list[dict[str, Any]]:
+        try:
+            return fetch()
+        except Exception as exc:  # noqa: BLE001 - surface any fetch failure on the page
+            errors[key] = str(exc)
+            return []
+
+    context: dict[str, Any] = {
+        "errors": errors,
+        "tab": tab,
+        "tabs": [
+            {"key": key, "label": label, "url": f"/data-quality?tab={key}"}
+            for key, label in DQ_TABS
+        ],
+    }
+
+    if tab == "jurisdictions":
+        no_topics = load("no_topics", fetch_dq_jurisdictions_without_topics)
+        missing_geofence = load("missing_geofence", fetch_dq_jurisdictions_missing_geofence)
+        path_issues = load("path_issues", fetch_dq_jurisdiction_path_issues)
+        context.update(
+            {
+                "missing_geofence_layers": _jurisdiction_layer_counts(missing_geofence, include_federal=False),
+                "missing_geofence_rows": [
+                    {
+                        "id": _display_value(row.get("id")),
+                        "name": _display_value(row.get("name")),
+                        "type": _display_value(row.get("type")),
+                        "parent_id": _display_value(row.get("parent_id")),
+                    }
+                    for row in missing_geofence
+                ],
+                "no_topics_layers": _jurisdiction_layer_counts(no_topics),
+                "no_topics_rows": [
+                    {
+                        "id": _display_value(row.get("id")),
+                        "name": _display_value(row.get("name")),
+                        "type": _display_value(row.get("type")),
+                        "parent_id": _display_value(row.get("parent_id")),
+                    }
+                    for row in no_topics
+                ],
+                "path_issue_tiles": _path_issue_tiles(path_issues),
+                "path_issue_rows": [
+                    {
+                        # Same key as the tile, so clicking a tile can filter these rows.
+                        "issue": row.get("issue") or "(none)",
+                        "issue_label": (row.get("issue") or "-").capitalize(),
+                        "descendant_id": _display_value(row.get("descendant_id")),
+                        "descendant_name": _display_value(row.get("descendant_name")),
+                        "descendant_type": _display_value(row.get("descendant_type")),
+                        "ancestor_id": _display_value(row.get("ancestor_id")),
+                        "ancestor_name": _display_value(row.get("ancestor_name")),
+                        "depth": _display_value(row.get("depth")),
+                    }
+                    for row in path_issues
+                ],
+            }
+        )
+        return context
+
+    by_source = load("locations", fetch_dq_locations_by_data_source)
+    duplicates = load("duplicates", fetch_dq_duplicate_place_ids)
+    parent_not_child = load("parent_not_child", fetch_dq_locations_with_parent_not_child)
+    child_no_parent = load("child_no_parent", fetch_dq_child_locations_without_parent)
+    multipart = load("multipart", fetch_dq_multipart_geofences_by_source)
+    by_status = load("status", fetch_dq_locations_by_status)
+    context.update(
+        {
+            "status_bars": _status_bars(by_status),
+            "status_rows": [
+                {
+                    # Same label as the bar, so clicking a bar can filter these rows.
+                    "status": row.get("status") or "(none)",
+                    "data_source": _display_value(row.get("data_source")),
+                    "locations": int(row.get("locations") or 0),
+                }
+                for row in by_status
+            ],
+            "total_locations": sum(int(row.get("locations") or 0) for row in by_source),
+            "locations_by_source": [
+                {"data_source": _display_value(row.get("data_source")), "locations": int(row.get("locations") or 0)}
+                for row in by_source
+            ],
+            "duplicate_count": len(duplicates),
+            "duplicate_rows": [
+                {
+                    "place_id": _display_value(row.get("place_id")),
+                    "copies": int(row.get("copies") or 0),
+                    "names": _join_values(row.get("names")),
+                    "sources": _join_values(row.get("sources")),
+                }
+                for row in duplicates
+            ],
+            "parent_not_child_count": len(parent_not_child),
+            "parent_not_child_rows": [
+                {
+                    "id": _display_value(row.get("id")),
+                    "name": _display_value(row.get("name")),
+                    "classification": _display_value(row.get("classification")),
+                    "data_source": _display_value(row.get("data_source")),
+                    "parent_name": _display_value(row.get("parent_name")),
+                    "parent_id": _display_value(row.get("parent_id")),
+                }
+                for row in parent_not_child
+            ],
+            "child_no_parent_count": len(child_no_parent),
+            "child_no_parent_rows": [
+                {
+                    "id": _display_value(row.get("id")),
+                    "name": _display_value(row.get("name")),
+                    "data_source": _display_value(row.get("data_source")),
+                    "place_id": _display_value(row.get("place_id")),
+                    "status": _display_value(row.get("status")),
+                }
+                for row in child_no_parent
+            ],
+            "multipart_total": sum(int(row.get("locations") or 0) for row in multipart),
+            "multipart_bars": _multipart_bars(multipart),
+            "multipart_rows": _multipart_rows(multipart),
+        }
+    )
+    return context
+
+
+@router.get("/data-quality", response_class=HTMLResponse)
+async def data_quality(request: Request) -> HTMLResponse:
+    if not _is_authenticated(request):
+        return _login_response(request)
+
+    tab = _data_quality_tab(request.query_params.get("tab"))
+    context = _data_quality_context(tab)
+    context["request"] = request
+    return templates.TemplateResponse(request, "data_quality.html", context)
 
 
 @router.post("/login", response_class=HTMLResponse)
