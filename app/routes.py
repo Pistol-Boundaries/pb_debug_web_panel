@@ -21,6 +21,7 @@ from app.supabase_client import (
     fetch_scoreboard_change_log,
     fetch_scoreboard_missed_alert_classification,
     fetch_scoreboard_missed_alert_summary,
+    fetch_dq_child_locations_without_parent,
     fetch_dq_duplicate_place_ids,
     fetch_dq_jurisdictions_missing_geofence,
     fetch_dq_jurisdictions_without_topics,
@@ -976,6 +977,7 @@ def _data_quality_context(tab: str = "locations") -> dict[str, Any]:
     by_source = load("locations", fetch_dq_locations_by_data_source)
     duplicates = load("duplicates", fetch_dq_duplicate_place_ids)
     parent_not_child = load("parent_not_child", fetch_dq_locations_with_parent_not_child)
+    child_no_parent = load("child_no_parent", fetch_dq_child_locations_without_parent)
     by_status = load("status", fetch_dq_locations_by_status)
     context.update(
         {
@@ -1015,6 +1017,17 @@ def _data_quality_context(tab: str = "locations") -> dict[str, Any]:
                     "parent_id": _display_value(row.get("parent_id")),
                 }
                 for row in parent_not_child
+            ],
+            "child_no_parent_count": len(child_no_parent),
+            "child_no_parent_rows": [
+                {
+                    "id": _display_value(row.get("id")),
+                    "name": _display_value(row.get("name")),
+                    "data_source": _display_value(row.get("data_source")),
+                    "place_id": _display_value(row.get("place_id")),
+                    "status": _display_value(row.get("status")),
+                }
+                for row in child_no_parent
             ],
         }
     )

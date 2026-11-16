@@ -307,6 +307,50 @@
         </details>
       {% endif %}
     </div>
+    {# ---------- Child locations without a parent (PB-656) ---------- #}
+    <div class="chart-section">
+      <h2>Child locations without a parent</h2>
+      <p class="chart-note">Locations classified <code>place_child</code> that have no <code>parent_id</code>. Every child should point to its parent; 0 is healthy.</p>
+      {% if errors.child_no_parent %}
+        <div class="alert alert-error"><strong>Unable to load child locations without a parent.</strong><span>{{ errors.child_no_parent }}</span></div>
+      {% else %}
+        <div class="stat-tiles">
+          <div class="stat-tile">
+            <p class="stat-tile-label">Child locations missing a parent</p>
+            <p class="stat-tile-value">{{ "{:,}".format(child_no_parent_count) }}</p>
+          </div>
+        </div>
+        <details class="raw-data-toggle">
+          <summary>View the {{ "{:,}".format(child_no_parent_count) }} child locations without a parent</summary>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Location ID</th>
+                  <th>Name</th>
+                  <th>Data source</th>
+                  <th>Place ID</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for row in child_no_parent_rows %}
+                  <tr>
+                    <td><code>{{ row.id }}</code></td>
+                    <td>{{ row.name }}</td>
+                    <td>{{ row.data_source }}</td>
+                    <td><code>{{ row.place_id }}</code></td>
+                    <td>{{ row.status }}</td>
+                  </tr>
+                {% else %}
+                  <tr><td colspan="5">No child locations missing a parent.</td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </details>
+      {% endif %}
+    </div>
     {% endif %}
   </section>
 {% endblock %}

@@ -32,6 +32,7 @@ must exist in the Supabase project the panel points to (dev):
 - `dq_duplicate_place_ids()` - place_ids used by more than one location (PB-653)
 - `dq_jurisdictions_without_topics()` - jurisdictions with no jurisdiction_topics (PB-654)
 - `dq_locations_with_parent_not_child()` - locations with a parent_id that aren't `place_child`
+- `dq_child_locations_without_parent()` - `place_child` locations with no parent_id (PB-656)
 - `dq_locations_by_status()` - location counts by status and data source
 - `dq_jurisdictions_missing_geofence()` - non-federal jurisdictions with no buffered geofence
 

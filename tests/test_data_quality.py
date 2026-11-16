@@ -47,6 +47,10 @@ def _fake_fetches(monkeypatch, **overrides):
             {'status': 'allowed', 'data_source': 'Texas Bars', 'locations': 15},
             {'status': 'mystery', 'data_source': 'Manual', 'locations': 2},
         ],
+        'fetch_dq_child_locations_without_parent': lambda: [
+            {'id': 'loc-9', 'name': 'Orphan Snack Bar', 'data_source': 'Manual',
+             'place_id': 'ChIJorphan', 'status': 'pending'},
+        ],
         'fetch_dq_locations_with_parent_not_child': lambda: [
             {'id': 'loc-1', 'name': 'Gift Shop', 'classification': 'location', 'data_source': 'Manual',
              'parent_id': 'loc-0', 'parent_name': 'State Fairgrounds'},
@@ -120,6 +124,8 @@ def test_locations_context_totals(monkeypatch):
     assert context['duplicate_count'] == 1
     assert context['duplicate_rows'][0]['names'] == 'Lucky Break Saloon, Lucky Break Saloon'
     assert context['parent_not_child_count'] == 1
+    assert context['child_no_parent_count'] == 1
+    assert context['child_no_parent_rows'][0]['place_id'] == 'ChIJorphan'
     assert 'no_topics_rows' not in context
 
 
@@ -140,6 +146,7 @@ def test_each_tab_only_runs_its_own_checks(monkeypatch):
         fetch_dq_duplicate_place_ids=must_not_run,
         fetch_dq_locations_with_parent_not_child=must_not_run,
         fetch_dq_locations_by_status=must_not_run,
+        fetch_dq_child_locations_without_parent=must_not_run,
     )
     context = routes._data_quality_context('jurisdictions')
     assert context['errors'] == {}
@@ -157,6 +164,8 @@ def test_locations_tab_is_the_default(client, monkeypatch):
     assert 'Texas Bars' in text                   # by-source drill-down
     assert 'ChIJabc' in text                      # duplicate drill-down
     assert 'State Fairgrounds' in text            # parent name in drill-down
+    assert 'Child locations without a parent' in text
+    assert 'Orphan Snack Bar' in text             # child-without-parent drill-down
     assert 'Locations by status' in text
     assert 'bar-fill tone-critical' in text       # prohibited bar
     assert 'Iowa Casinos' in text                 # status drill-down
@@ -203,8 +212,11 @@ def test_empty_results(client, monkeypatch):
         fetch_dq_jurisdictions_without_topics=lambda: [],
         fetch_dq_jurisdictions_missing_geofence=lambda: [],
         fetch_dq_locations_with_parent_not_child=lambda: [],
+        fetch_dq_child_locations_without_parent=lambda: [],
     )
-    assert 'No duplicated place IDs.' in client.get('/data-quality').text
+    locations_text = client.get('/data-quality').text
+    assert 'No duplicated place IDs.' in locations_text
+    assert 'No child locations missing a parent.' in locations_text
     jurisdictions_text = client.get('/data-quality?tab=jurisdictions').text
     assert 'Every jurisdiction has topics.' in jurisdictions_text
     assert 'Every jurisdiction has a geofence.' in jurisdictions_text

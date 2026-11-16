@@ -323,6 +323,13 @@ def fetch_dq_locations_with_parent_not_child() -> list[dict[str, Any]]:
     return response.data or []
 
 
+def fetch_dq_child_locations_without_parent() -> list[dict[str, Any]]:
+    """PB-656: locations classified place_child with no parent_id
+    (dq_child_locations_without_parent)."""
+    response = get_supabase_client().rpc("dq_child_locations_without_parent").execute()
+    return response.data or []
+
+
 def fetch_dq_locations_by_status() -> list[dict[str, Any]]:
     """Location counts per status and data_source (dq_locations_by_status)."""
     response = get_supabase_client().rpc("dq_locations_by_status").execute()
